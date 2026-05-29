@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "587618649403",
+    "project_id": "nike-rerun",
+    "storage_bucket": "nike-rerun.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:587618649403:android:380639c4ef89b46160631e",
+        "android_client_info": {
+          "package_name": "com.example.nike_rerun"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAlVBp4bS_HGVEtlARIot8f5wZY4sPVbZg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
