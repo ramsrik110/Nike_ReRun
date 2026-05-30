@@ -29,7 +29,9 @@ TextStyle _body(double size, {Color color = _white}) =>
 // ─────────────────────────────────────────────────────────────────────────────
 
 class CustomerHomeScreen extends StatefulWidget {
-  const CustomerHomeScreen({super.key});
+  final VoidCallback? onScanTap;
+
+  const CustomerHomeScreen({super.key, this.onScanTap});
 
   @override
   State<CustomerHomeScreen> createState() => _CustomerHomeScreenState();
@@ -50,35 +52,44 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    // Get customer name
+    // Get customer document
     final userDoc = await FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
         .get();
     final data = userDoc.data();
-    _name = (data?['name'] as String? ?? user.displayName ?? 'Athlete')
+    _name = (data?['CST-NM'] as String? ?? user.displayName ?? 'Athlete')
         .split(' ')
         .first;
 
-    // Fetch shoes linked to this customer (CUID-LNK == user.uid)
-    final shoesSnap = await FirebaseFirestore.instance
+    final seen = <String>{};
+    final shoes = <ShoeModel>[];
+
+    // Primary: fetch each shoe by SUID from the SUID-LNK array on the user doc
+    final linkedIds = data?['SUID-LNK'] as List<dynamic>? ?? [];
+    for (final id in linkedIds) {
+      final suid = id as String;
+      if (seen.contains(suid)) continue;
+      final doc = await FirebaseFirestore.instance
+          .collection('Shoes') // capital S — always
+          .doc(suid)
+          .get();
+      if (doc.exists) {
+        shoes.add(ShoeModel.fromFirestore(doc));
+        seen.add(suid);
+      }
+    }
+
+    // Secondary fallback: query Shoes where CUID-LNK == current user UID
+    final byLinkSnap = await FirebaseFirestore.instance
         .collection('Shoes') // capital S — always
         .where('CUID-LNK', isEqualTo: user.uid)
         .get();
-
-    // For demo: if no shoes linked by UID, try fetching from SUID-LNK array
-    List<ShoeModel> shoes = shoesSnap.docs
-        .map((d) => ShoeModel.fromFirestore(d))
-        .toList();
-
-    if (shoes.isEmpty && data != null) {
-      final linkedIds = data['SUID-LNK'] as List<dynamic>? ?? [];
-      for (final id in linkedIds) {
-        final doc = await FirebaseFirestore.instance
-            .collection('Shoes') // capital S — always
-            .doc(id as String)
-            .get();
-        if (doc.exists) shoes.add(ShoeModel.fromFirestore(doc));
+    for (final d in byLinkSnap.docs) {
+      final shoe = ShoeModel.fromFirestore(d);
+      if (!seen.contains(shoe.suid)) {
+        shoes.add(shoe);
+        seen.add(shoe.suid);
       }
     }
 
@@ -310,6 +321,22 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               'Scan your shoe to get started.',
               style: _body(14, color: _grey),
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: widget.onScanTap,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _lime,
+                foregroundColor: _black,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 28, vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                elevation: 0,
+              ),
+              child: Text('Scan My Shoe',
+                  style: _body(15, color: _black)
+                      .copyWith(fontWeight: FontWeight.w900)),
             ),
           ],
         ),

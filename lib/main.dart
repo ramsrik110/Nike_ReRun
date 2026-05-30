@@ -153,7 +153,7 @@ class _CustomerShellState extends State<CustomerShell> {
       body: IndexedStack(
         index: _index,
         children: [
-          const CustomerHomeScreen(),
+          CustomerHomeScreen(onScanTap: () => setState(() => _index = 1)),
           CustomerScanScreen(isActive: _index == 1),
         ],
       ),

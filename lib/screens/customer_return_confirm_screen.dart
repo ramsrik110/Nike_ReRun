@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../models/shoe_model.dart';
 import 'customer_return_success_screen.dart';
 
@@ -63,6 +65,31 @@ class _CustomerReturnConfirmScreenState
 
   // ── Confirm return ────────────────────────────────────────────────────────
 
+  static const _webhookUrl =
+      'https://hook.eu1.make.com/weifl2piodeq3xh37j3gbpj8ai6g1ep3';
+
+  Future<void> _sendConfirmationEmail({
+    required String email,
+    required String shoeName,
+    required int coinsEarned,
+  }) async {
+    try {
+      await http.post(
+        Uri.parse(_webhookUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email':       email,
+          'shoeName':    shoeName,
+          'coinsEarned': coinsEarned,
+        }),
+      );
+      debugPrint('[Email] Confirmation sent to $email');
+    } catch (e) {
+      // Non-blocking — email failure should not stop the return flow
+      debugPrint('[Email] Failed to send confirmation: $e');
+    }
+  }
+
   Future<void> _confirmReturn() async {
     setState(() => _loading = true);
     final user = FirebaseAuth.instance.currentUser;
@@ -86,6 +113,16 @@ class _CustomerReturnConfirmScreenState
         'LCS-RTN': FieldValue.arrayUnion([widget.shoe.suid]),
         'RWD-NCB': FieldValue.increment(widget.shoe.rwdAmt),
       });
+
+      // 3. Fire confirmation email via Make.com webhook (non-blocking)
+      final email = user.email ?? '';
+      if (email.isNotEmpty) {
+        await _sendConfirmationEmail(
+          email:       email,
+          shoeName:    widget.shoe.snm,
+          coinsEarned: widget.shoe.rwdAmt,
+        );
+      }
 
       if (mounted) {
         Navigator.pushReplacement(

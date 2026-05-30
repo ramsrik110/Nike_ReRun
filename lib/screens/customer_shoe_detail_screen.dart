@@ -56,9 +56,42 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
           .collection('Shoes') // capital S — always
           .doc(widget.suid)
           .get();
+
+      final shoe = doc.exists ? ShoeModel.fromFirestore(doc) : null;
+
+      // Link shoe to logged-in customer if not already linked
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (shoe != null && currentUser != null) {
+        final existingOwner = shoe.cuidLnk;
+        if (existingOwner == currentUser.uid) {
+          // Already owned by this customer — no-op
+        } else if (existingOwner.isNotEmpty) {
+          // Owned by a different customer — block and surface error
+          if (mounted) {
+            setState(() {
+              _shoe    = null;
+              _loading = false;
+              _error   = 'This shoe is already registered to another customer.';
+            });
+          }
+          return;
+        } else {
+          // Unowned — link to this customer
+          await FirebaseFirestore.instance
+              .collection('Shoes')
+              .doc(widget.suid)
+              .update({'CUID-LNK': currentUser.uid});
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUser.uid)
+              .update({'SUID-LNK': FieldValue.arrayUnion([widget.suid])});
+          debugPrint('[ShoeDetail] linked ${widget.suid} to ${currentUser.uid}');
+        }
+      }
+
       if (mounted) {
         setState(() {
-          _shoe    = doc.exists ? ShoeModel.fromFirestore(doc) : null;
+          _shoe    = shoe;
           _loading = false;
           _error   = null;
         });
@@ -96,6 +129,8 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
   }
 
   Widget _buildError(String message) {
+    final isOwnershipError =
+        message == 'This shoe is already registered to another customer.';
     return Scaffold(
       backgroundColor: _black,
       appBar: AppBar(
@@ -104,7 +139,8 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
           icon: const Icon(Icons.arrow_back_ios, color: _white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Load Error', style: _heading(18)),
+        title: Text(isOwnershipError ? 'Already Registered' : 'Load Error',
+            style: _heading(18)),
       ),
       body: Center(
         child: Padding(
@@ -112,27 +148,49 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.wifi_off, color: _lime, size: 48),
+              Icon(
+                isOwnershipError ? Icons.lock_outline : Icons.wifi_off,
+                color: _lime,
+                size: 48,
+              ),
               const SizedBox(height: 16),
-              Text('Could not load shoe data.', style: _body(16)),
+              Text(
+                isOwnershipError
+                    ? 'This shoe belongs to someone else.'
+                    : 'Could not load shoe data.',
+                style: _body(16),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 8),
               Text(
-                'Check Firestore security rules allow authenticated reads on the Shoes collection.\n\n$message',
+                isOwnershipError
+                    ? 'This shoe has already been registered by another customer and cannot be claimed.'
+                    : 'Check Firestore security rules allow authenticated reads on the Shoes collection.\n\n$message',
                 style: _body(12, color: _grey),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () {
-                  setState(() { _loading = true; _error = null; });
-                  _load();
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _lime,
-                  foregroundColor: _black,
+              if (!isOwnershipError)
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() { _loading = true; _error = null; });
+                    _load();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _lime,
+                    foregroundColor: _black,
+                  ),
+                  child: Text('Retry', style: _body(14, color: _black)),
+                )
+              else
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _lime,
+                    foregroundColor: _black,
+                  ),
+                  child: Text('Go Back', style: _body(14, color: _black)),
                 ),
-                child: Text('Retry', style: _body(14, color: _black)),
-              ),
             ],
           ),
         ),
