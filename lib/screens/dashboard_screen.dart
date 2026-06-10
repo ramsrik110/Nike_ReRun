@@ -137,9 +137,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Nike ReRun\nDashboard', style: _heading(28))
-            .animate()
-            .fadeIn(duration: 400.ms),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                ColorFiltered(
+                  colorFilter: const ColorFilter.mode(_lime, BlendMode.modulate),
+                  child: Image.asset('assets/images/nikererun.png', height: 26),
+                ),
+                const SizedBox(width: 8),
+                Text('RERUN', style: _heading(24, color: _white)),
+              ],
+            ).animate().fadeIn(duration: 400.ms),
+            const SizedBox(height: 4),
+            Text('Dashboard', style: _heading(38))
+                .animate()
+                .fadeIn(delay: 100.ms, duration: 400.ms),
+          ],
+        ),
         Row(
           children: [
             Column(
@@ -259,10 +275,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _data.trend.map((v) => v.toDouble()).toList();
 
     return Container(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
+        borderRadius: BorderRadius.all(Radius.circular(14)),
+        border: Border(top: BorderSide(color: _lime, width: 2)),
       ),
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -377,8 +393,16 @@ class _MetricCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: _lime, size: 20),
-          const SizedBox(height: 10),
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: _lime.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: _lime, size: 18),
+          ),
+          const SizedBox(height: 12),
           // FIX 7: count-up from 0 to value over 1500ms
           TweenAnimationBuilder<double>(
             key: ValueKey('${filterKey}_$label'),
@@ -392,7 +416,7 @@ class _MetricCard extends StatelessWidget {
               return Text(
                 '$displayVal$suffix',
                 style: GoogleFonts.bebasNeue(
-                  fontSize: 26,
+                  fontSize: 34,
                   color: _white,
                   letterSpacing: 1,
                 ),

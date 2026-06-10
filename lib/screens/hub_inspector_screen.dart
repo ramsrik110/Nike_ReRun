@@ -321,7 +321,7 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text('Scan The Label.', style: _heading(24))
+        Text('Scan The Label.', style: _heading(38))
             .animate()
             .fadeIn(duration: 400.ms),
         const SizedBox(height: 32),
@@ -422,10 +422,10 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
   Widget _buildShoeCard(ShoeModel shoe) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
+        borderRadius: BorderRadius.all(Radius.circular(14)),
+        border: Border(left: BorderSide(color: _lime, width: 3)),
       ),
       child: Row(
         children: [
@@ -437,8 +437,27 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
               child: shoe.snmImg.isNotEmpty
                   ? Image.network(shoe.snmImg, fit: BoxFit.contain,
                       errorBuilder: (_, __, ___) =>
-                          const Icon(Icons.directions_run, color: _lime))
-                  : const Icon(Icons.directions_run, color: _lime),
+                          Container(
+                              color: _black,
+                              child: Center(
+                                child: Text('NIKE',
+                                    style: GoogleFonts.bebasNeue(
+                                      fontSize: 18,
+                                      color: _lime.withOpacity(0.2),
+                                      letterSpacing: 4,
+                                    )),
+                              )))
+                  : Container(
+                      color: _black,
+                      child: Center(
+                        child: Text('NIKE',
+                            style: GoogleFonts.bebasNeue(
+                              fontSize: 18,
+                              color: _lime.withOpacity(0.2),
+                              letterSpacing: 4,
+                            )),
+                      ),
+                    ),
             ),
           ),
           const SizedBox(width: 14),
@@ -482,10 +501,9 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
+      decoration: const BoxDecoration(
+        color: Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.all(Radius.circular(14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -524,12 +542,15 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
     required String? selected,
     required ValueChanged<String> onSelect,
   }) {
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
+        borderRadius: BorderRadius.circular(14),
+        border: selected != null
+            ? const Border(left: BorderSide(color: _lime, width: 3))
+            : Border.all(color: _border, width: 0.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -598,10 +619,9 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
+      decoration: const BoxDecoration(
+        color: Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.all(Radius.circular(14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -671,10 +691,9 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
   Widget _buildCleaningToggle() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
+      decoration: const BoxDecoration(
+        color: Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.all(Radius.circular(14)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,

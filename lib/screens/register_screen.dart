@@ -152,7 +152,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     curve: Curves.elasticOut,
                   ),
               const SizedBox(height: 16),
-              Text('Your account is ready.', style: _heading(22)),
+              Text('Your account is ready.', style: _heading(24)),
               const SizedBox(height: 8),
               Text(
                 "Let us get you in.",
@@ -177,7 +177,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: Text('Sign In', style: _body(15, color: _black)),
+                  child: Text('Sign In', style: _body(16, color: _black)),
                 ),
               ),
             ],
@@ -235,13 +235,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 40),
                 _buildLogo(),
                 const SizedBox(height: 32),
-                Text('WELCOME TO\nTHE LOOP.', style: _heading(32))
+                Text('WELCOME TO\nTHE LOOP.', style: _heading(36))
                     .animate()
                     .fadeIn(duration: 400.ms)
                     .slideY(begin: 0.2, end: 0, duration: 400.ms),
                 const SizedBox(height: 8),
                 Text('Create your Nike ReRun account.',
-                        style: _body(14, color: _grey))
+                        style: _body(15, color: _grey))
                     .animate()
                     .fadeIn(delay: 100.ms, duration: 400.ms),
                 const SizedBox(height: 32),
@@ -304,14 +304,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget _buildLogo() {
     return Row(
       children: [
-        Text('NIKE RERUN',
-            style: _heading(24, color: _lime))
+        ColorFiltered(
+          colorFilter: const ColorFilter.mode(_lime, BlendMode.modulate),
+          child: Image.asset('assets/images/nikererun.png', height: 30),
+        ).animate().fadeIn(duration: 500.ms),
+        const SizedBox(width: 10),
+        Text('RERUN', style: _heading(26, color: _white))
             .animate()
             .fadeIn(duration: 500.ms),
-        const SizedBox(width: 8),
-        const Icon(Icons.eco, color: _lime, size: 22)
-            .animate()
-            .fadeIn(delay: 200.ms, duration: 400.ms),
       ],
     );
   }
@@ -335,14 +335,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   color: Colors.redAccent, size: 16),
               const SizedBox(width: 6),
               Text('Registration Failed',
-                  style: _body(13, color: Colors.redAccent)
+                  style: _body(14, color: Colors.redAccent)
                       .copyWith(fontWeight: FontWeight.w700)),
             ],
           ),
           const SizedBox(height: 6),
           // Shows the real Firebase error so we can diagnose it
           Text(_errorMsg!,
-              style: _body(12, color: Colors.redAccent.withOpacity(0.9))),
+              style: _body(13, color: Colors.redAccent.withOpacity(0.9))),
         ],
       ),
     );
@@ -366,7 +366,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       validator: validator,
       decoration: InputDecoration(
         labelText:     label,
-        labelStyle:    _body(14, color: _grey),
+        labelStyle:    _body(15, color: _grey),
         prefixIcon:    Icon(icon, color: _grey, size: 20),
         suffixIcon:    toggleObscure != null
             ? IconButton(
@@ -424,7 +424,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 width: 20,
                 child: CircularProgressIndicator(color: _black, strokeWidth: 2),
               )
-            : Text('Join The Loop.', style: _body(16, color: _black)
+            : Text('Join The Loop.', style: _body(17, color: _black)
                 .copyWith(fontWeight: FontWeight.w800)),
       ),
     )
@@ -441,12 +441,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         child: RichText(
           text: TextSpan(
-            style: _body(14, color: _grey),
+            style: _body(15, color: _grey),
             children: [
               const TextSpan(text: 'Already in the loop? '),
               TextSpan(
                 text: 'Sign In',
-                style: _body(14, color: _lime)
+                style: _body(15, color: _lime)
                     .copyWith(fontWeight: FontWeight.w700),
               ),
             ],

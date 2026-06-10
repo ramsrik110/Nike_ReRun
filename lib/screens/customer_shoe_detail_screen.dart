@@ -140,7 +140,7 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(isOwnershipError ? 'Already Registered' : 'Load Error',
-            style: _heading(18)),
+            style: _heading(20)),
       ),
       body: Center(
         child: Padding(
@@ -207,7 +207,7 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
           icon: const Icon(Icons.arrow_back_ios, color: _white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Shoe Not Found', style: _heading(18)),
+        title: Text('Shoe Not Found', style: _heading(20)),
       ),
       body: Center(
           child: Text('No shoe with ID ${widget.suid}',
@@ -272,8 +272,19 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
                       shoe.snmImg,
                       fit: BoxFit.contain,
                       errorBuilder: (_, __, ___) =>
-                          const Icon(Icons.directions_run,
-                              color: _lime, size: 80),
+                          Container(
+                            color: _black,
+                            child: Center(
+                              child: Text(
+                                'NIKE',
+                                style: GoogleFonts.bebasNeue(
+                                  fontSize: 48,
+                                  color: _lime.withOpacity(0.12),
+                                  letterSpacing: 14,
+                                ),
+                              ),
+                            ),
+                          ),
                     )
                       .animate()
                       .scale(
@@ -300,7 +311,7 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
                 ),
                 child: Center(
                   child: Text('NIKE RERUN',
-                      style: _heading(18, color: _lime)),
+                      style: _heading(20, color: _lime)),
                 ),
               ),
             ),
@@ -316,7 +327,7 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(shoe.snmHdl, style: _heading(28))
+        Text(shoe.snmHdl, style: _heading(48))
             .animate()
             .fadeIn(duration: 500.ms)
             .slideY(begin: 0.2, end: 0, duration: 500.ms),
@@ -331,7 +342,7 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text('Eco Tracked',
-                  style: _body(12, color: _black)
+                  style: _body(13, color: _black)
                       .copyWith(fontWeight: FontWeight.w700)),
             )
                 .animate(onPlay: (c) => c.repeat(reverse: true))
@@ -359,10 +370,10 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
     ];
 
     return Container(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
+        borderRadius: BorderRadius.all(Radius.circular(14)),
+        border: Border(top: BorderSide(color: _lime, width: 2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -371,9 +382,9 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: Row(
               children: [
-                const Icon(Icons.verified_outlined, color: _lime, size: 18),
-                const SizedBox(width: 8),
-                Text("Your Shoe's Story", style: _heading(18)),
+                Container(width: 4, height: 20, color: _lime),
+                const SizedBox(width: 10),
+                Text("Your Shoe's Story", style: _heading(20)),
               ],
             ),
           ),
@@ -399,9 +410,9 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(row.label, style: _body(14, color: _grey)),
+          Text(row.label, style: _body(15, color: _grey)),
           Text(row.value,
-              style: _body(14,
+              style: _body(15,
                       color: row.isEco ? _lime : _white)
                   .copyWith(fontWeight: FontWeight.w600)),
         ],
@@ -429,16 +440,15 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
 
   Widget _buildTimeline() {
     return Container(
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
+      decoration: const BoxDecoration(
+        color: Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.all(Radius.circular(14)),
       ),
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('The Journey', style: _heading(18)),
+          Text('The Journey', style: _heading(22)),
           const SizedBox(height: 20),
           Row(
             children: [
@@ -570,7 +580,7 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
                   elevation: 0,
                 ),
                 child: Text('Close The Loop.',
-                    style: _body(16, color: _black)
+                    style: _body(17, color: _black)
                         .copyWith(fontWeight: FontWeight.w900)),
               ),
             )
@@ -582,7 +592,7 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
                 .fadeIn(delay: 800.ms, duration: 400.ms),
             const SizedBox(height: 6),
             Text('Return It. Earn ${shoe.rwdAmt} NikeCoins.',
-                    style: _body(12, color: _lime))
+                    style: _body(13, color: _lime))
                 .animate()
                 .fadeIn(delay: 900.ms, duration: 400.ms),
           ],
@@ -620,10 +630,11 @@ class _TimelineLabel extends StatelessWidget {
       child: Text(
         text,
         textAlign: TextAlign.center,
-        style: GoogleFonts.bebasNeue(
-          fontSize: 11,
+        style: GoogleFonts.nunito(
+          fontSize: 12,
           color: active ? _lime : _grey,
-          letterSpacing: active ? 1.0 : 0.5,
+          fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+          letterSpacing: 0.3,
         ),
       ),
     );

@@ -149,7 +149,7 @@ class _CustomerReturnConfirmScreenState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error confirming return. Try again.',
-                style: _body(13)),
+                style: _body(14)),
             backgroundColor: _card,
           ),
         );
@@ -177,7 +177,7 @@ class _CustomerReturnConfirmScreenState
                     _buildRotatingIcon(),
                     const SizedBox(height: 24),
                     Text('CLOSING\nTHE LOOP.',
-                            style: _heading(32),
+                            style: _heading(34),
                             textAlign: TextAlign.center)
                         .animate()
                         .fadeIn(delay: 200.ms, duration: 400.ms)
@@ -209,7 +209,7 @@ class _CustomerReturnConfirmScreenState
           onPressed: () => Navigator.pop(context),
         ),
         const Spacer(),
-        Text('NIKE RERUN', style: _heading(18, color: _lime)),
+        Text('NIKE RERUN', style: _heading(20, color: _lime)),
         const Spacer(),
         const SizedBox(width: 48),
       ],
@@ -266,7 +266,7 @@ class _CustomerReturnConfirmScreenState
           const SizedBox(height: 12),
           Text(widget.shoe.snm,
               textAlign: TextAlign.center,
-              style: _body(14).copyWith(fontWeight: FontWeight.w700)),
+              style: _body(15).copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 16),
           const Divider(color: _border, height: 1),
           const SizedBox(height: 14),
@@ -277,7 +277,7 @@ class _CustomerReturnConfirmScreenState
               const SizedBox(width: 8),
               Text(
                 'You will earn ${widget.shoe.rwdAmt} NikeCoins.',
-                style: _body(16, color: _lime)
+                style: _body(17, color: _lime)
                     .copyWith(fontWeight: FontWeight.w700),
               ),
             ],
@@ -309,7 +309,7 @@ class _CustomerReturnConfirmScreenState
                     child: CircularProgressIndicator(
                         color: _black, strokeWidth: 2))
                 : Text('Confirm Return.',
-                    style: _body(16, color: _black)
+                    style: _body(17, color: _black)
                         .copyWith(fontWeight: FontWeight.w800)),
           ),
         )

@@ -1,48 +1,122 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
-
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="Nike ReRun — sustainable sneaker resale marketplace">
-
-  <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Nike ReRun">
+  <meta name="theme-color" content="#111111">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-
-  <!-- Favicon -->
   <link rel="icon" type="image/x-icon" href="favicon.ico"/>
   <link rel="icon" type="image/svg+xml" href="favicon.svg"/>
   <link rel="icon" type="image/png" sizes="96x96" href="favicon.png"/>
-
   <title>Nike ReRun</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { background: #111111; height: 100%; width: 100%; overflow: hidden; }
+
+    /* Top bar */
+    #top-bar {
+      position: fixed; top: 0; left: 0;
+      height: 3px; width: 0;
+      background: #CDFC49;
+      box-shadow: 0 0 8px #CDFC49;
+      z-index: 9999;
+      animation: topbar 4s cubic-bezier(0.05,0.8,0.4,1) forwards;
+    }
+    #top-bar.done { width: 100% !important; animation: none; transition: width 0.2s ease; }
+    @keyframes topbar { 0%{width:0%} 50%{width:70%} 100%{width:90%} }
+
+    /* Centre loader */
+    #pre-loader {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 20px;
+      background: #111111;
+      transition: opacity 0.4s ease;
+    }
+    #pre-loader.hidden { opacity: 0; pointer-events: none; }
+
+    /* Lottie canvas */
+    #lottie-wrap {
+      width: 260px;
+      height: 260px;
+    }
+
+    /* Brand */
+    #brand {
+      font-family: 'Arial Black', Arial, sans-serif;
+      font-weight: 900;
+      font-size: 28px;
+      letter-spacing: 9px;
+      color: #CDFC49;
+      opacity: 0;
+      transform: translateY(10px);
+      animation: brand-up 0.6s ease 0.8s forwards;
+    }
+    @keyframes brand-up { to { opacity:1; transform:translateY(0); } }
+
+    .line {
+      height: 1.5px; width: 0;
+      background: rgba(205,252,73,0.35);
+      border-radius: 2px;
+      animation: draw-line 0.7s ease 1.2s forwards;
+    }
+    @keyframes draw-line { to { width: 155px; } }
+
+    #tagline {
+      font-family: Arial, sans-serif;
+      font-size: 9px; letter-spacing: 3.5px;
+      color: #555; text-transform: uppercase;
+      opacity: 0;
+      animation: fade-in 0.5s ease 1.5s forwards;
+    }
+    @keyframes fade-in { to { opacity: 1; } }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
 
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
-  <script src="flutter_bootstrap.js" async></script>
+  <div id="top-bar"></div>
+
+  <div id="pre-loader">
+    <div id="lottie-wrap"></div>
+    <div id="brand">NIKE RERUN</div>
+    <div class="line"></div>
+    <div id="tagline">Sustainable Sneakers</div>
+  </div>
+
+  <!-- Local lottie — no CDN, no extra network request -->
+  <script src="lottie.min.js"></script>
+
+  <script>
+    // Play the JSON animation immediately
+    lottie.loadAnimation({
+      container:  document.getElementById('lottie-wrap'),
+      renderer:   'svg',
+      loop:       true,
+      autoplay:   true,
+      path:       'splash_animation.json'
+    });
+
+    // Load Flutter in parallel — doesn't block the animation
+    var s = document.createElement('script');
+    s.src = 'flutter_bootstrap.js';
+    document.head.appendChild(s);
+
+    // Hand off to Flutter on first frame
+    window.addEventListener('flutter-first-frame', function () {
+      var bar    = document.getElementById('top-bar');
+      var loader = document.getElementById('pre-loader');
+      if (bar)    { bar.classList.add('done'); setTimeout(function(){ bar.remove(); }, 300); }
+      if (loader) { loader.classList.add('hidden'); setTimeout(function(){ loader.remove(); }, 450); }
+    });
+  </script>
+
 </body>
 </html>

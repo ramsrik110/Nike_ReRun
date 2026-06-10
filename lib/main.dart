@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:lottie/lottie.dart';
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
 import 'screens/customer_home_screen.dart';
+import 'screens/customer_landing_screen.dart';
 import 'screens/customer_shoe_detail_screen.dart';
+import 'screens/customer_profile_screen.dart';
 import 'screens/hub_inspector_screen.dart';
+import 'screens/inspector_profile_screen.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/admin_profile_screen.dart';
 
 // NOTE: bulkUploadEverything() is intentionally commented out.
 // Database is already fully populated — do not uncomment.
@@ -108,32 +114,132 @@ class _SplashScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFF111111),
       body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'NIKE RERUN',
-              style: GoogleFonts.bebasNeue(
-                  fontSize: 36,
-                  color: const Color(0xFFCDFC49),
-                  letterSpacing: 3),
-            ).animate(onPlay: (c) => c.repeat(reverse: true))
-                .fadeIn(duration: 600.ms),
-            const SizedBox(height: 24),
-            const CircularProgressIndicator(
-              color: Color(0xFFCDFC49),
-              strokeWidth: 2,
-            ),
-          ],
-        ),
+        child: kIsWeb ? _buildWebSplash() : _buildNativeSplash(),
       ),
+    );
+  }
+
+  // ── Web: branded splash (Lottie AE expressions don't work on Chrome)
+  Widget _buildWebSplash() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Text starts fully visible, then pulses between full and 50% opacity
+        Text(
+          'NIKE RERUN',
+          style: GoogleFonts.bebasNeue(
+            fontSize: 48,
+            color: const Color(0xFFCDFC49),
+            letterSpacing: 5,
+          ),
+        )
+            .animate(onPlay: (c) => c.repeat(reverse: true))
+            .fadeIn(duration: 1.ms)          // appear instantly
+            .then()
+            .fade(                            // pulse 1.0 → 0.45 → 1.0
+              begin: 1.0,
+              end: 0.45,
+              duration: 900.ms,
+              curve: Curves.easeInOut,
+            ),
+        const SizedBox(height: 28),
+        const SizedBox(
+          width: 32,
+          height: 32,
+          child: CircularProgressIndicator(
+            color: Color(0xFFCDFC49),
+            strokeWidth: 2.5,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Native (Android / iOS): Lottie swoosh with Nike ReRun colour palette
+  Widget _buildNativeSplash() {
+    // French Lime  #CDFC49  →  [0.8039, 0.9882, 0.2863]
+    // Dark charcoal background is handled by the Scaffold, not the animation.
+    final Widget animation = Lottie.asset(
+      'assets/lottie/splash_animation.json',
+      width: 300,
+      height: 300,
+      fit: BoxFit.contain,
+      delegates: LottieDelegates(
+        values: [
+          // Swoosh fill — white → French Lime
+          ValueDelegate.color(
+            const ['shape logo', 'Shape 1', 'Fill 1'],
+            value: const Color(0xFFCDFC49),
+          ),
+          // Outline strokes — white → French Lime
+          ValueDelegate.strokeColor(
+            const ['**', 'Stroke 1'],
+            value: const Color(0xFFCDFC49),
+          ),
+          // Sparkle / repeater fills
+          ValueDelegate.color(
+            const ['**', 'Fill 1'],
+            value: const Color(0xFFCDFC49),
+          ),
+        ],
+      ),
+    );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Zoom-out entry: starts large, settles to natural size
+        animation
+            .animate()
+            .scale(
+              begin: const Offset(2.0, 2.0),
+              end: const Offset(1.0, 1.0),
+              duration: 800.ms,
+              curve: Curves.easeOutCubic,
+            )
+            .fadeIn(duration: 400.ms),
+
+        const SizedBox(height: 12),
+
+        // Brand name slides up after animation starts
+        Text(
+          'NIKE RERUN',
+          style: GoogleFonts.bebasNeue(
+            fontSize: 32,
+            color: const Color(0xFFCDFC49),
+            letterSpacing: 5,
+          ),
+        )
+            .animate()
+            .fadeIn(delay: 350.ms, duration: 500.ms)
+            .slideY(
+              begin: 0.4,
+              end: 0.0,
+              delay: 350.ms,
+              duration: 500.ms,
+              curve: Curves.easeOut,
+            ),
+
+        const SizedBox(height: 6),
+
+        // Subtle tagline
+        Text(
+          'SUSTAINABLE SNEAKERS',
+          style: GoogleFonts.nunito(
+            fontSize: 12,
+            color: const Color(0xFF888888),
+            letterSpacing: 2.5,
+          ),
+        )
+            .animate()
+            .fadeIn(delay: 550.ms, duration: 500.ms),
+      ],
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Customer shell — 2 tabs: Home + Scan
-// Passes isActive to CustomerScanScreen so the camera starts/stops with the tab
+// Customer shell — 3 tabs: Home + Scan + Profile  |  floating pill nav bar
 // ─────────────────────────────────────────────────────────────────────────────
 
 class CustomerShell extends StatefulWidget {
@@ -150,47 +256,71 @@ class _CustomerShellState extends State<CustomerShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF111111),
-      body: IndexedStack(
-        index: _index,
+      body: Stack(
         children: [
-          CustomerHomeScreen(onScanTap: () => setState(() => _index = 1)),
-          CustomerScanScreen(isActive: _index == 1),
+          IndexedStack(
+            index: _index,
+            children: [
+              CustomerLandingScreen(onScanTap: () => setState(() => _index = 1)),
+              CustomerScanScreen(isActive: _index == 1),
+              const CustomerProfileScreen(),
+            ],
+          ),
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 24,
+            child: _buildFloatingNavBar(),
+          ),
         ],
       ),
-      bottomNavigationBar: _buildNavBar(),
     );
   }
 
-  Widget _buildNavBar() {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1A1A1A),
-        border: Border(top: BorderSide(color: Color(0xFF2A2A2A))),
-      ),
-      child: SafeArea(
-        child: SizedBox(
-          height: 60,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _NavItem(
-                icon: Icons.home_outlined,
-                activeIcon: Icons.home,
-                label: 'Home',
-                index: 0,
-                current: _index,
-                onTap: () => setState(() => _index = 0),
-              ),
-              _NavItem(
-                icon: Icons.qr_code_outlined,
-                activeIcon: Icons.qr_code,
-                label: 'Scan',
-                index: 1,
-                current: _index,
-                onTap: () => setState(() => _index = 1),
-              ),
-            ],
-          ),
+  Widget _buildFloatingNavBar() {
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: const Color(0xFF2A2A2A)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.6),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _NavItem(
+              icon: Icons.home_outlined,
+              activeIcon: Icons.home,
+              label: 'Home',
+              index: 0,
+              current: _index,
+              onTap: () => setState(() => _index = 0),
+            ),
+            _NavItem(
+              icon: Icons.qr_code_outlined,
+              activeIcon: Icons.qr_code,
+              label: 'Scan',
+              index: 1,
+              current: _index,
+              onTap: () => setState(() => _index = 1),
+            ),
+            _NavItem(
+              icon: Icons.person_outline,
+              activeIcon: Icons.person,
+              label: 'Profile',
+              index: 2,
+              current: _index,
+              onTap: () => setState(() => _index = 2),
+            ),
+          ],
         ),
       ),
     );
@@ -198,25 +328,163 @@ class _CustomerShellState extends State<CustomerShell> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Inspector shell — HubInspectorScreen, no tab bar
+// Inspector shell — 2 tabs: Inspect + Profile  |  floating pill nav bar
 // ─────────────────────────────────────────────────────────────────────────────
 
-class InspectorShell extends StatelessWidget {
+class InspectorShell extends StatefulWidget {
   const InspectorShell({super.key});
 
   @override
-  Widget build(BuildContext context) => const HubInspectorScreen();
+  State<InspectorShell> createState() => _InspectorShellState();
+}
+
+class _InspectorShellState extends State<InspectorShell> {
+  int _index = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF111111),
+      body: Stack(
+        children: [
+          IndexedStack(
+            index: _index,
+            children: const [
+              HubInspectorScreen(),
+              InspectorProfileScreen(),
+            ],
+          ),
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 24,
+            child: _buildFloatingNavBar(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFloatingNavBar() {
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: const Color(0xFF2A2A2A)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.6),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _NavItem(
+              icon: Icons.qr_code_scanner_outlined,
+              activeIcon: Icons.qr_code_scanner,
+              label: 'Inspect',
+              index: 0,
+              current: _index,
+              onTap: () => setState(() => _index = 0),
+            ),
+            _NavItem(
+              icon: Icons.person_outline,
+              activeIcon: Icons.person,
+              label: 'Profile',
+              index: 1,
+              current: _index,
+              onTap: () => setState(() => _index = 1),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Admin shell — DashboardScreen, no tab bar
+// Admin shell — 2 tabs: Dashboard + Profile  |  floating pill nav bar
 // ─────────────────────────────────────────────────────────────────────────────
 
-class AdminShell extends StatelessWidget {
+class AdminShell extends StatefulWidget {
   const AdminShell({super.key});
 
   @override
-  Widget build(BuildContext context) => const DashboardScreen();
+  State<AdminShell> createState() => _AdminShellState();
+}
+
+class _AdminShellState extends State<AdminShell> {
+  int _index = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF111111),
+      body: Stack(
+        children: [
+          IndexedStack(
+            index: _index,
+            children: const [
+              DashboardScreen(),
+              AdminProfileScreen(),
+            ],
+          ),
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 24,
+            child: _buildFloatingNavBar(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFloatingNavBar() {
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: const Color(0xFF2A2A2A)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.6),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _NavItem(
+              icon: Icons.dashboard_outlined,
+              activeIcon: Icons.dashboard,
+              label: 'Dashboard',
+              index: 0,
+              current: _index,
+              onTap: () => setState(() => _index = 0),
+            ),
+            _NavItem(
+              icon: Icons.person_outline,
+              activeIcon: Icons.person,
+              label: 'Profile',
+              index: 1,
+              current: _index,
+              onTap: () => setState(() => _index = 1),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -317,7 +585,7 @@ class _CustomerScanScreenState extends State<CustomerScanScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('No shoe found for ID: $suid',
-                style: GoogleFonts.nunito(color: Colors.white)),
+                style: GoogleFonts.nunito(color: Colors.white, fontSize: 14)),
             backgroundColor: const Color(0xFF1A1A1A),
           ),
         );
@@ -357,7 +625,7 @@ class _CustomerScanScreenState extends State<CustomerScanScreen>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Enter Shoe ID',
             style: GoogleFonts.bebasNeue(
-                fontSize: 20, color: Colors.white, letterSpacing: 1.2)),
+                fontSize: 22, color: Colors.white, letterSpacing: 1.2)),
         content: TextField(
           controller: ctrl,
           autofocus: true,
@@ -416,7 +684,7 @@ class _CustomerScanScreenState extends State<CustomerScanScreen>
                   Text(
                     'Scan The Label.',
                     style: GoogleFonts.bebasNeue(
-                        fontSize: 24,
+                        fontSize: 38,
                         color: Colors.white,
                         letterSpacing: 1),
                   ).animate().fadeIn(duration: 400.ms),
@@ -424,7 +692,7 @@ class _CustomerScanScreenState extends State<CustomerScanScreen>
                   Text(
                     'Point your camera at the shoe\'s QR code.',
                     style: GoogleFonts.nunito(
-                        fontSize: 13, color: const Color(0xFF888888)),
+                        fontSize: 14, color: const Color(0xFF888888)),
                   ).animate().fadeIn(delay: 150.ms, duration: 400.ms),
                   const SizedBox(height: 32),
                   _buildScannerBox(),
@@ -440,7 +708,7 @@ class _CustomerScanScreenState extends State<CustomerScanScreen>
                     child: Text(
                       'Enter SUID manually',
                       style: GoogleFonts.nunito(
-                        fontSize: 13,
+                        fontSize: 14,
                         color: const Color(0xFFCDFC49),
                         decoration: TextDecoration.underline,
                         decorationColor: const Color(0xFFCDFC49),
@@ -467,7 +735,7 @@ class _CustomerScanScreenState extends State<CustomerScanScreen>
             children: [
               Text('Scan Mode',
                   style: GoogleFonts.bebasNeue(
-                      fontSize: 20, color: Colors.white, letterSpacing: 1.2)),
+                      fontSize: 22, color: Colors.white, letterSpacing: 1.2)),
               const SizedBox(width: 10),
               const Icon(Icons.qr_code_scanner,
                   color: Color(0xFFCDFC49), size: 20),
@@ -570,14 +838,14 @@ class _CustomerScanScreenState extends State<CustomerScanScreen>
           Text(
             'Camera unavailable.',
             style: GoogleFonts.nunito(
-                color: const Color(0xFF888888), fontSize: 13),
+                color: const Color(0xFF888888), fontSize: 14),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 4),
           Text(
             'Allow camera in browser\nor use manual entry below.',
             style: GoogleFonts.nunito(
-                color: const Color(0xFF555555), fontSize: 11),
+                color: const Color(0xFF555555), fontSize: 12),
             textAlign: TextAlign.center,
           ),
         ],
@@ -701,7 +969,7 @@ class _NavItem extends StatelessWidget {
             Text(
               label,
               style: GoogleFonts.nunito(
-                fontSize: 10,
+                fontSize: 11,
                 color: active
                     ? const Color(0xFFCDFC49)
                     : const Color(0xFF888888),

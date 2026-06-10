@@ -161,7 +161,7 @@ class _HubResultScreenState extends State<HubResultScreen>
     return Text(
       _displayedDecision.isEmpty ? ' ' : _displayedDecision,
       textAlign: TextAlign.center,
-      style: _heading(42),
+      style: _heading(60),
     );
   }
 
@@ -174,7 +174,7 @@ class _HubResultScreenState extends State<HubResultScreen>
         offset: Offset(0, _arrowAnim.value),
         child: child,
       ),
-      child: const Icon(Icons.arrow_downward_rounded, color: _lime, size: 52),
+      child: const Icon(Icons.arrow_downward_rounded, color: _lime, size: 68),
     )
         .animate()
         .fadeIn(delay: 500.ms, duration: 400.ms);
@@ -230,10 +230,10 @@ class _HubResultScreenState extends State<HubResultScreen>
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
+        borderRadius: BorderRadius.all(Radius.circular(14)),
+        border: Border(top: BorderSide(color: _lime, width: 2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -142,9 +142,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         children: [
           Row(
             children: [
-              Text('NIKE RERUN', style: _heading(22, color: _white)),
-              const SizedBox(width: 8),
-              const Icon(Icons.eco, color: _lime, size: 20),
+              ColorFiltered(
+                colorFilter: const ColorFilter.mode(_lime, BlendMode.modulate),
+                child: Image.asset('assets/images/nikererun.png', height: 28),
+              ),
+              const SizedBox(width: 10),
+              Text('RERUN', style: _heading(22, color: _white)),
             ],
           ),
           IconButton(
@@ -177,12 +180,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Hey $_name,', style: _heading(28, color: _lime))
+        Text('Hey $_name,', style: _heading(44, color: _lime))
             .animate()
             .fadeIn(duration: 400.ms)
             .slideY(begin: 0.2, end: 0, duration: 400.ms),
         const SizedBox(height: 4),
-        Text('Your kicks. Your story.', style: _body(16, color: _grey))
+        Text('Your kicks. Your story.', style: _body(15, color: _grey))
             .animate()
             .fadeIn(delay: 150.ms, duration: 400.ms),
       ],
@@ -193,7 +196,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Your Kicks', style: _heading(20))
+        Text('Your Kicks', style: _heading(28))
             .animate()
             .fadeIn(delay: 200.ms, duration: 400.ms),
         const SizedBox(height: 14),
@@ -234,10 +237,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       ),
       child: Container(
         width: 160,
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: _card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _border),
+          borderRadius: BorderRadius.all(Radius.circular(14)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -261,8 +263,16 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                       )
                     : Container(
                         color: _black,
-                        child: const Icon(Icons.directions_run,
-                            color: _lime, size: 40),
+                        child: Center(
+                          child: Text(
+                            'NIKE',
+                            style: GoogleFonts.bebasNeue(
+                              fontSize: 24,
+                              color: _lime.withOpacity(0.18),
+                              letterSpacing: 6,
+                            ),
+                          ),
+                        ),
                       ),
               ),
             ),
@@ -275,14 +285,14 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                     shoe.snmHdl,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: _heading(13, color: _lime),
+                    style: _heading(16, color: _lime),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     shoe.snm,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: _body(11, color: _grey),
+                    style: _body(13, color: _grey),
                   ),
                 ],
               ),
@@ -377,7 +387,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   Widget _stat(String value, String label) {
     return Column(
       children: [
-        Text(value, style: _heading(20, color: _lime)),
+        Text(value, style: _heading(22, color: _lime)),
         const SizedBox(height: 2),
         Text(label, style: _body(12, color: _grey)),
       ],

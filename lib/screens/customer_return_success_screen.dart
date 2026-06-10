@@ -165,7 +165,7 @@ class _CustomerReturnSuccessScreenState
   Widget _buildSubtext() {
     return Text(
       'Your shoe is officially back in the game.',
-      style: _body(14, color: _grey),
+      style: _body(15, color: _grey),
       textAlign: TextAlign.center,
     )
         .animate()
@@ -205,7 +205,7 @@ class _CustomerReturnSuccessScreenState
           elevation: 0,
         ),
         child: Text('Back Home.',
-            style: _body(16, color: _black)
+            style: _body(17, color: _black)
                 .copyWith(fontWeight: FontWeight.w900)),
       ),
     )

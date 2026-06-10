@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../models/shoe_model.dart';
 import '../models/customer_model.dart';
@@ -7,20 +8,26 @@ import '../models/customer_model.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 // Colours
 // ─────────────────────────────────────────────────────────────────────────────
-const _black      = Color(0xFF111111);
-const _card       = Color(0xFF1A1A1A);
-const _lime       = Color(0xFFCDFC49);
-const _white      = Color(0xFFFFFFFF);
-const _grey       = Color(0xFF888888);
-const _border     = Color(0xFF2A2A2A);
+const _black  = Color(0xFF111111);
+const _card   = Color(0xFF1A1A1A);
+const _lime   = Color(0xFFCDFC49);
+const _white  = Color(0xFFFFFFFF);
+const _grey   = Color(0xFF888888);
+const _border = Color(0xFF2A2A2A);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Font helpers
+// ─────────────────────────────────────────────────────────────────────────────
+TextStyle _heading(double size, {Color color = _white}) =>
+    GoogleFonts.bebasNeue(fontSize: size, color: color, letterSpacing: 1.5);
+TextStyle _body(double size, {Color color = _white}) =>
+    GoogleFonts.nunito(fontSize: size, color: color);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen
 // ─────────────────────────────────────────────────────────────────────────────
 
 class CustomerScreen extends StatefulWidget {
-  /// Pass the SUID of the shoe to display.
-  /// Defaults to the Air Max 90 linked to the demo customer.
   final String suid;
   final String customerId;
 
@@ -37,7 +44,7 @@ class CustomerScreen extends StatefulWidget {
 class _CustomerScreenState extends State<CustomerScreen> {
   ShoeModel?     _shoe;
   CustomerModel? _customer;
-  bool           _loading = true;
+  bool           _loading  = true;
   bool           _returning = false;
 
   @override
@@ -45,8 +52,6 @@ class _CustomerScreenState extends State<CustomerScreen> {
     super.initState();
     _load();
   }
-
-  // ── Data ──────────────────────────────────────────────────────────────────
 
   Future<void> _load() async {
     try {
@@ -77,7 +82,6 @@ class _CustomerScreenState extends State<CustomerScreen> {
     setState(() => _returning = true);
 
     try {
-      // Update shoe lifecycle status in Firestore
       await FirebaseFirestore.instance
           .collection('Shoes') // capital S — always
           .doc(widget.suid)
@@ -96,7 +100,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
       context: context,
       backgroundColor: _card,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (_) => _ReturnConfirmationSheet(
         rwdAmt: _shoe!.rwdAmt,
@@ -106,8 +110,6 @@ class _CustomerScreenState extends State<CustomerScreen> {
     setState(() => _returning = false);
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -115,9 +117,9 @@ class _CustomerScreenState extends State<CustomerScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _lime))
           : _shoe == null
-              ? const Center(
+              ? Center(
                   child: Text('Shoe not found.',
-                      style: TextStyle(color: _white)))
+                      style: _body(16, color: _white)))
               : _buildContent(),
     );
   }
@@ -131,13 +133,13 @@ class _CustomerScreenState extends State<CustomerScreen> {
             _buildAppBar(shoe),
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
                     _buildHeadline(shoe),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
                     _buildPassportCard(shoe),
                     const SizedBox(height: 16),
                     _buildTimeline(shoe),
@@ -156,67 +158,63 @@ class _CustomerScreenState extends State<CustomerScreen> {
 
   Widget _buildAppBar(ShoeModel shoe) {
     return SliverAppBar(
-      expandedHeight: 280,
+      expandedHeight: 300,
       backgroundColor: _black,
       pinned: true,
       leading: const SizedBox.shrink(),
       flexibleSpace: FlexibleSpaceBar(
         background: Stack(
           children: [
-            // Shoe image
             Positioned.fill(
               child: shoe.snmImg.isNotEmpty
                   ? Image.network(
                       shoe.snmImg,
                       fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const Icon(
-                        Icons.directions_run,
-                        color: _lime,
-                        size: 80,
-                      ),
+                      errorBuilder: (_, __, ___) => _shoePlaceholder(),
                     )
-                  : const Icon(Icons.directions_run, color: _lime, size: 80),
+                  : _shoePlaceholder(),
             ),
-            // Top bar
             Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
+              top: 0, left: 0, right: 0,
               child: Container(
                 color: _card,
                 padding: EdgeInsets.only(
-                  top: MediaQuery.of(context).padding.top + 8,
-                  left: 16,
-                  right: 16,
-                  bottom: 10,
+                  top: MediaQuery.of(context).padding.top + 10,
+                  left: 20,
+                  right: 20,
+                  bottom: 12,
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Logo text
-                    const Text(
-                      'NIKE RERUN',
-                      style: TextStyle(
-                        color: _lime,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 2,
-                      ),
+                    ColorFiltered(
+                      colorFilter: const ColorFilter.mode(
+                          _lime, BlendMode.modulate),
+                      child: Image.asset(
+                          'assets/images/nikererun.png', height: 24),
                     ),
-                    // Leaf icon
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: _lime.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.eco, color: _lime, size: 18),
-                    ),
+                    const SizedBox(width: 8),
+                    Text('RERUN', style: _heading(22, color: _white)),
                   ],
                 ),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _shoePlaceholder() {
+    return Container(
+      color: _black,
+      child: Center(
+        child: Text(
+          'NIKE',
+          style: GoogleFonts.bebasNeue(
+            fontSize: 48,
+            color: _lime.withOpacity(0.12),
+            letterSpacing: 14,
+          ),
         ),
       ),
     );
@@ -228,51 +226,31 @@ class _CustomerScreenState extends State<CustomerScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // SNM-HDL — ALL CAPS Nike headline
-        Text(
-          shoe.snmHdl,
-          style: const TextStyle(
-            color: _white,
-            fontSize: 28,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 0.5,
-            height: 1.1,
-          ),
-        )
+        Text(shoe.snmHdl, style: _heading(50))
             .animate()
             .fadeIn(duration: 500.ms)
             .slideY(begin: 0.2, end: 0, duration: 500.ms),
         const SizedBox(height: 10),
         Row(
           children: [
-            // Eco Tracked badge
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: _lime,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Text(
+              child: Text(
                 'Eco Tracked',
-                style: TextStyle(
-                  color: _black,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: _body(12, color: _black)
+                    .copyWith(fontWeight: FontWeight.w700),
               ),
             )
                 .animate(onPlay: (c) => c.repeat(reverse: true))
                 .shimmer(duration: 2000.ms, color: _white.withOpacity(0.3)),
             const SizedBox(width: 10),
-            // SUID
-            Text(
-              shoe.suid,
-              style: const TextStyle(color: _grey, fontSize: 12),
-            ),
+            Text(shoe.suid, style: _body(12, color: _grey)),
           ],
-        )
-            .animate()
-            .fadeIn(delay: 200.ms, duration: 400.ms),
+        ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
       ],
     );
   }
@@ -281,49 +259,31 @@ class _CustomerScreenState extends State<CustomerScreen> {
 
   Widget _buildPassportCard(ShoeModel shoe) {
     return Container(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
+        borderRadius: BorderRadius.all(Radius.circular(14)),
+        border: Border(top: BorderSide(color: _lime, width: 2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Card header
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: Row(
               children: [
-                const Icon(Icons.verified_outlined, color: _lime, size: 18),
-                const SizedBox(width: 8),
-                const Text(
-                  "Your Shoe's Story",
-                  style: TextStyle(
-                    color: _white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                Container(width: 4, height: 20, color: _lime),
+                const SizedBox(width: 10),
+                Text("Your Shoe's Story", style: _heading(20)),
               ],
             ),
           ),
           const SizedBox(height: 12),
           const Divider(color: _border, height: 1),
           const SizedBox(height: 8),
-
-          // Data rows
-          _passportRow(
-            'Built With',
-            _buildMaterialString(shoe),
-            isEco: false,
-          ),
-          _passportRow('Born In',    shoe.mfgCtr, isEco: false),
-          _passportRow('Powered By', shoe.mfgNrg,  isEco: false),
-          _passportRow(
-            'You Saved',
-            '${shoe.ecoCo2} kg CO₂',
-            isEco: true,
-          ),
+          _passportRow('Built With', _buildMaterialString(shoe), isEco: false),
+          _passportRow('Born In',    shoe.mfgCtr,                isEco: false),
+          _passportRow('Powered By', shoe.mfgNrg,                isEco: false),
+          _passportRow('You Saved',  '${shoe.ecoCo2} kg CO₂',   isEco: true),
           const SizedBox(height: 8),
         ],
       ),
@@ -339,15 +299,11 @@ class _CustomerScreenState extends State<CustomerScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: const TextStyle(color: _grey, fontSize: 14)),
+          Text(label, style: _body(14, color: _grey)),
           Text(
             value,
-            style: TextStyle(
-              color: isEco ? _lime : _white,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
+            style: _body(14, color: isEco ? _lime : _white)
+                .copyWith(fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -367,23 +323,15 @@ class _CustomerScreenState extends State<CustomerScreen> {
 
   Widget _buildTimeline(ShoeModel shoe) {
     return Container(
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
+      decoration: const BoxDecoration(
+        color: Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.all(Radius.circular(14)),
       ),
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'The Journey',
-            style: TextStyle(
-              color: _white,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          Text('The Journey', style: _heading(22)),
           const SizedBox(height: 20),
           Row(
             children: [
@@ -398,8 +346,8 @@ class _CustomerScreenState extends State<CustomerScreen> {
           const Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _TimelineLabel('MADE',           active: false),
-              _TimelineLabel('YOURS',          active: false),
+              _TimelineLabel('MADE',            active: false),
+              _TimelineLabel('YOURS',           active: false),
               _TimelineLabel('CLOSE\nTHE LOOP', active: true),
             ],
           ),
@@ -419,7 +367,10 @@ class _CustomerScreenState extends State<CustomerScreen> {
         shape: BoxShape.circle,
         color: active ? _lime : (done ? _lime.withOpacity(0.4) : _border),
         boxShadow: active
-            ? [BoxShadow(color: _lime.withOpacity(0.5), blurRadius: 10, spreadRadius: 2)]
+            ? [BoxShadow(
+                color: _lime.withOpacity(0.5),
+                blurRadius: 10,
+                spreadRadius: 2)]
             : null,
       ),
     )
@@ -444,13 +395,11 @@ class _CustomerScreenState extends State<CustomerScreen> {
 
   Widget _buildBottomButton(ShoeModel shoe) {
     return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
+      bottom: 0, left: 0, right: 0,
       child: Container(
         padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
+          left: 20,
+          right: 20,
           top: 12,
           bottom: MediaQuery.of(context).padding.bottom + 12,
         ),
@@ -468,29 +417,19 @@ class _CustomerScreenState extends State<CustomerScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _lime,
                   foregroundColor: _black,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 18),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                      borderRadius: BorderRadius.circular(10)),
                   elevation: 0,
                 ),
                 child: _returning
                     ? const SizedBox(
-                        height: 20,
-                        width: 20,
+                        height: 20, width: 20,
                         child: CircularProgressIndicator(
-                          color: _black,
-                          strokeWidth: 2,
-                        ),
+                            color: _black, strokeWidth: 2),
                       )
-                    : const Text(
-                        'Close The Loop.',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
+                    : Text('Close The Loop.',
+                        style: _heading(22, color: _black)),
               ),
             )
                 .animate()
@@ -499,10 +438,8 @@ class _CustomerScreenState extends State<CustomerScreen> {
             const SizedBox(height: 6),
             Text(
               'Return It. Earn ${shoe.rwdAmt} NikeCoins.',
-              style: const TextStyle(color: _lime, fontSize: 12),
-            )
-                .animate()
-                .fadeIn(delay: 700.ms, duration: 400.ms),
+              style: _body(13, color: _lime),
+            ).animate().fadeIn(delay: 700.ms, duration: 400.ms),
           ],
         ),
       ),
@@ -516,7 +453,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
 
 class _TimelineLabel extends StatelessWidget {
   final String text;
-  final bool active;
+  final bool   active;
 
   const _TimelineLabel(this.text, {required this.active});
 
@@ -527,7 +464,7 @@ class _TimelineLabel extends StatelessWidget {
       child: Text(
         text,
         textAlign: TextAlign.center,
-        style: TextStyle(
+        style: GoogleFonts.nunito(
           color: active ? _lime : _grey,
           fontSize: 11,
           fontWeight: active ? FontWeight.w700 : FontWeight.w400,
@@ -543,7 +480,7 @@ class _TimelineLabel extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _ReturnConfirmationSheet extends StatelessWidget {
-  final int rwdAmt;
+  final int          rwdAmt;
   final VoidCallback onDone;
 
   const _ReturnConfirmationSheet({
@@ -554,52 +491,38 @@ class _ReturnConfirmationSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(28),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 48,
-            height: 4,
+            width: 48, height: 4,
             decoration: BoxDecoration(
               color: _border,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
           Container(
-            width: 64,
-            height: 64,
+            width: 72, height: 72,
             decoration: BoxDecoration(
               color: _lime.withOpacity(0.15),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.check, color: _lime, size: 32),
+            child: const Icon(Icons.check, color: _lime, size: 36),
           )
               .animate()
               .scale(begin: const Offset(0.5, 0.5), duration: 400.ms,
                   curve: Curves.elasticOut),
-          const SizedBox(height: 16),
-          const Text(
-            'RETURN INITIATED.',
-            style: TextStyle(
-              color: _white,
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1,
-            ),
-          ),
+          const SizedBox(height: 20),
+          Text('RETURN INITIATED.', style: _heading(32)),
           const SizedBox(height: 8),
-          Text(
-            'You\'ve earned $rwdAmt NikeCoins.',
-            style: const TextStyle(color: _lime, fontSize: 14),
-          ),
+          Text('You\'ve earned $rwdAmt NikeCoins.',
+              style: _body(14, color: _lime)),
           const SizedBox(height: 8),
-          const Text(
-            'A confirmation email is on its way.',
-            style: TextStyle(color: _grey, fontSize: 13),
-          ),
-          const SizedBox(height: 28),
+          Text('A confirmation email is on its way.',
+              style: _body(13, color: _grey)),
+          const SizedBox(height: 32),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
@@ -607,18 +530,11 @@ class _ReturnConfirmationSheet extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: _lime,
                 foregroundColor: _black,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                    borderRadius: BorderRadius.circular(10)),
               ),
-              child: const Text(
-                'Done.',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
+              child: Text('Done.', style: _heading(20, color: _black)),
             ),
           ),
           const SizedBox(height: 8),

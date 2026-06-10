@@ -76,6 +76,11 @@ class _LoginScreenState extends State<LoginScreen> {
         _loading  = false;
         _errorMsg = _friendlyError(e.code);
       });
+    } catch (e) {
+      setState(() {
+        _loading  = false;
+        _errorMsg = 'Error: ${e.toString()}';
+      });
     }
   }
 
@@ -111,11 +116,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
   String _friendlyError(String code) {
     switch (code) {
-      case 'user-not-found':   return 'No account found with that email.';
-      case 'wrong-password':   return 'Wrong password. Try again.';
-      case 'invalid-email':    return 'Check that email address.';
-      case 'user-disabled':    return 'This account has been disabled.';
-      default:                 return 'Could not sign in. Try again.';
+      case 'user-not-found':    return 'No account found with that email.';
+      case 'wrong-password':    return 'Wrong password. Try again.';
+      case 'invalid-credential':return 'Email or password is incorrect.';
+      case 'invalid-email':     return 'Check that email address.';
+      case 'user-disabled':     return 'This account has been disabled.';
+      case 'too-many-requests': return 'Too many attempts. Wait a moment and try again.';
+      case 'network-request-failed': return 'No internet connection.';
+      default:                  return 'Sign-in failed [$code]. Try again.';
     }
   }
 
@@ -136,13 +144,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 60),
                 _buildLogo(),
                 const SizedBox(height: 40),
-                Text('BACK IN\nTHE GAME.', style: _heading(32))
+                Text('BACK IN\nTHE GAME.', style: _heading(58))
                     .animate()
                     .fadeIn(duration: 400.ms)
                     .slideY(begin: 0.2, end: 0, duration: 400.ms),
                 const SizedBox(height: 8),
                 Text('Sign in to your Nike ReRun account.',
-                        style: _body(14, color: _grey))
+                        style: _body(15, color: _grey))
                     .animate()
                     .fadeIn(delay: 100.ms, duration: 400.ms),
                 const SizedBox(height: 40),
@@ -187,19 +195,19 @@ class _LoginScreenState extends State<LoginScreen> {
       children: [
         Row(
           children: [
-            Text('NIKE RERUN', style: _heading(28, color: _lime))
+            ColorFiltered(
+              colorFilter: const ColorFilter.mode(_lime, BlendMode.modulate),
+              child: Image.asset('assets/images/nikererun.png', height: 32),
+            ).animate().fadeIn(duration: 500.ms),
+            const SizedBox(width: 10),
+            Text('RERUN', style: _heading(30, color: _white))
                 .animate()
                 .fadeIn(duration: 500.ms),
-            const SizedBox(width: 8),
-            const Icon(Icons.eco, color: _lime, size: 24)
-                .animate()
-                .fadeIn(delay: 200.ms)
-                .rotate(begin: -0.1, end: 0, duration: 600.ms),
           ],
         ),
         const SizedBox(height: 6),
         Text('Circular. Tracked. Yours.',
-            style: _body(13, color: _grey))
+            style: _body(14, color: _grey))
             .animate()
             .fadeIn(delay: 300.ms),
       ],
@@ -216,7 +224,7 @@ class _LoginScreenState extends State<LoginScreen> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.red.withOpacity(0.4)),
       ),
-      child: Text(_errorMsg!, style: _body(13, color: Colors.redAccent)),
+      child: Text(_errorMsg!, style: _body(14, color: Colors.redAccent)),
     );
   }
 
@@ -238,7 +246,7 @@ class _LoginScreenState extends State<LoginScreen> {
       validator:    validator,
       decoration: InputDecoration(
         labelText:     label,
-        labelStyle:    _body(14, color: _grey),
+        labelStyle:    _body(15, color: _grey),
         prefixIcon:    Icon(icon, color: _grey, size: 20),
         suffixIcon:    toggleObscure != null
             ? IconButton(
@@ -296,7 +304,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: CircularProgressIndicator(
                     color: _black, strokeWidth: 2))
             : Text("Let's Go.",
-                style: _body(16, color: _black)
+                style: _body(17, color: _black)
                     .copyWith(fontWeight: FontWeight.w800)),
       ),
     )
@@ -313,12 +321,12 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         child: RichText(
           text: TextSpan(
-            style: _body(14, color: _grey),
+            style: _body(15, color: _grey),
             children: [
               const TextSpan(text: 'New to ReRun? '),
               TextSpan(
                 text: 'Register',
-                style: _body(14, color: _lime)
+                style: _body(15, color: _lime)
                     .copyWith(fontWeight: FontWeight.w700),
               ),
             ],
