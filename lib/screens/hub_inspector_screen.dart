@@ -3,31 +3,22 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-// NOTE: qr_code_scanner is removed from pubspec for web build compatibility.
-// For native Android/iOS deployment: add qr_code_scanner: ^1.0.1 to pubspec.yaml,
-// uncomment the import below, and uncomment the _buildRealScanner() method body.
-// import 'package:qr_code_scanner/qr_code_scanner.dart';
 import '../models/shoe_model.dart';
+import '../nike_colors.dart';
+import '../theme_notifier.dart';
 import '../utils/routing_algorithm.dart';
 import 'hub_result_screen.dart';
 import 'login_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Colours
+// Constants that never change with theme
 // ─────────────────────────────────────────────────────────────────────────────
-const _black  = Color(0xFF111111);
-const _card   = Color(0xFF1A1A1A);
-const _lime   = Color(0xFFCDFC49);
-const _white  = Color(0xFFFFFFFF);
-const _grey   = Color(0xFF888888);
-const _border = Color(0xFF2A2A2A);
+const _lime  = NikeColors.lime;
+const _black = NikeColors.black;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Font helpers
-// ─────────────────────────────────────────────────────────────────────────────
-TextStyle _heading(double size, {Color color = _white}) =>
+TextStyle _heading(double size, {Color color = const Color(0xFFFFFFFF)}) =>
     GoogleFonts.bebasNeue(fontSize: size, color: color, letterSpacing: 1.5);
-TextStyle _body(double size, {Color color = _white}) =>
+TextStyle _body(double size, {Color color = const Color(0xFFFFFFFF)}) =>
     GoogleFonts.nunito(fontSize: size, color: color);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,20 +34,13 @@ class HubInspectorScreen extends StatefulWidget {
 
 class _HubInspectorScreenState extends State<HubInspectorScreen>
     with TickerProviderStateMixin {
-  // ── Scan state ────────────────────────────────────────────────────────────
   bool       _scanned = false;
   bool       _loading = false;
   ShoeModel? _shoe;
 
-  // NOTE: For native mobile builds, restore QRViewController here.
-  // final GlobalKey _qrKey = GlobalKey(debugLabel: 'QR');
-  // QRViewController? _qrController;
-
-  // ── Scan line animation ───────────────────────────────────────────────────
   late AnimationController _scanLineCtrl;
   late Animation<double>   _scanLineAnim;
 
-  // ── Condition selections ──────────────────────────────────────────────────
   String? _soleCondition;
   String? _fabricCondition;
   String? _wearLevel;
@@ -64,10 +48,8 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
   String  _estimatedAge  = 'Under 1 Year';
   bool    _cleaningReq   = false;
 
-  // ── Bounce triggers (pill tap animation) ──────────────────────────────────
   final Map<String, int> _pillTapCount = {};
 
-  // ── Demo shoe cycling ─────────────────────────────────────────────────────
   final List<String> _demoSuids = [
     'NR-2024-AF1-0001',
     'NR-2024-PEG-0003',
@@ -80,6 +62,8 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
     'NR-2024-FRN-0011',
   ];
   int _demoIndex = 0;
+
+  NikeColors get _c => context.nc;
 
   @override
   void initState() {
@@ -107,7 +91,7 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
 
     try {
       final doc = await FirebaseFirestore.instance
-          .collection('Shoes') // capital S — always
+          .collection('Shoes')
           .doc(suid)
           .get();
 
@@ -116,8 +100,8 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Shoe $suid not found.',
-                  style: _body(13)),
-              backgroundColor: _card,
+                  style: _body(13, color: _c.text)),
+              backgroundColor: _c.card,
             ),
           );
           setState(() => _loading = false);
@@ -139,13 +123,9 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
         });
       }
     } catch (_) {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
-
-  // ── Demo scan (web fallback + tap) ────────────────────────────────────────
 
   void _demoScan() {
     final suid = _demoSuids[_demoIndex % _demoSuids.length];
@@ -158,27 +138,27 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: _card,
-        title: Text('Enter Shoe ID', style: _heading(20)),
+        backgroundColor: _c.card,
+        title: Text('Enter Shoe ID', style: _heading(20, color: _c.text)),
         content: TextField(
           controller: ctrl,
-          style: _body(16),
+          style: _body(16, color: _c.text),
           autofocus: true,
           decoration: InputDecoration(
             hintText: 'e.g. NR-2024-AM90-0006',
-            hintStyle: _body(14, color: _grey),
-            enabledBorder: const OutlineInputBorder(
-                borderSide: BorderSide(color: _border)),
+            hintStyle: _body(14, color: _c.sub),
+            enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: _c.border)),
             focusedBorder: const OutlineInputBorder(
                 borderSide: BorderSide(color: _lime, width: 2)),
             filled: true,
-            fillColor: _black,
+            fillColor: _c.bg,
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Cancel', style: _body(14, color: _grey)),
+            child: Text('Cancel', style: _body(14, color: _c.sub)),
           ),
           TextButton(
             onPressed: () {
@@ -209,8 +189,6 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
     });
   }
 
-  // ── Route It ──────────────────────────────────────────────────────────────
-
   void _runRouting() {
     if (!_canRoute) return;
 
@@ -224,9 +202,8 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
       cleaningRequired:    _cleaningReq,
     );
 
-    // Write decision to Firestore
     FirebaseFirestore.instance
-        .collection('Shoes') // capital S — always
+        .collection('Shoes')
         .doc(_shoe!.suid)
         .update({'RTE-DCN': result.decision, 'LCS-STS': 'ROUTED.'});
 
@@ -269,14 +246,13 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _black,
+      backgroundColor: _c.bg,
       body: SafeArea(
         child: Column(
           children: [
             _buildHeader(),
             Expanded(
-              child:
-                  _scanned ? _buildInspectionPanel() : _buildScanPanel(),
+              child: _scanned ? _buildInspectionPanel() : _buildScanPanel(),
             ),
           ],
         ),
@@ -289,24 +265,24 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      color: _card,
+      color: _c.card,
       child: Row(
         children: [
           if (_scanned)
             GestureDetector(
               onTap: _reset,
-              child: const Icon(Icons.arrow_back_ios, color: _white, size: 20),
+              child: Icon(Icons.arrow_back_ios, color: _c.text, size: 20),
             )
           else
             const SizedBox(width: 20),
           const SizedBox(width: 8),
           Expanded(
-            child: Text('Scan Mode', style: _heading(20)),
+            child: Text('Scan Mode', style: _heading(20, color: _c.text)),
           ),
-          const Icon(Icons.qr_code_scanner, color: _lime, size: 24),
-          const SizedBox(width: 8),
+          Icon(Icons.qr_code_scanner, color: _lime, size: 24),
+          const SizedBox(width: 4),
           IconButton(
-            icon: const Icon(Icons.logout, color: _grey, size: 20),
+            icon: Icon(Icons.logout, color: _c.sub, size: 20),
             onPressed: _signOut,
             tooltip: 'Sign Out',
           ),
@@ -321,15 +297,12 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text('Scan The Label.', style: _heading(38))
+        Text('Scan The Label.', style: _heading(38, color: _c.text))
             .animate()
             .fadeIn(duration: 400.ms),
         const SizedBox(height: 32),
-        // Animated viewfinder — tap to demo-scan or use manual entry below
-        // For native mobile: restore QRView here with _buildRealScanner()
         _buildWebViewfinder(),
         const SizedBox(height: 20),
-        // Manual entry fallback — always visible
         GestureDetector(
           onTap: _openManualEntry,
           child: Text(
@@ -346,7 +319,6 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
     );
   }
 
-  // Web viewfinder (animated fake — tap cycles demo shoes)
   Widget _buildWebViewfinder() {
     return GestureDetector(
       onTap: _demoScan,
@@ -355,7 +327,7 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
     ).animate().fadeIn(delay: 200.ms);
   }
 
-  // ── Inspection panel (post-scan) ──────────────────────────────────────────
+  // ── Inspection panel ──────────────────────────────────────────────────────
 
   Widget _buildInspectionPanel() {
     final shoe = _shoe!;
@@ -387,7 +359,6 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
             onSelect: (v) => setState(() => _fabricCondition = v),
           ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
           const SizedBox(height: 14),
-          // FIX 5: Additional grading fields
           _buildConditionSelector(
             title:    'Overall Wear Level',
             pills:    const ['Light', 'Moderate', 'Heavy'],
@@ -422,10 +393,10 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
   Widget _buildShoeCard(ShoeModel shoe) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.all(Radius.circular(14)),
-        border: Border(left: BorderSide(color: _lime, width: 3)),
+      decoration: BoxDecoration(
+        color: _c.card,
+        borderRadius: const BorderRadius.all(Radius.circular(14)),
+        border: const Border(left: BorderSide(color: _lime, width: 3)),
       ),
       child: Row(
         children: [
@@ -438,7 +409,7 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
                   ? Image.network(shoe.snmImg, fit: BoxFit.contain,
                       errorBuilder: (_, __, ___) =>
                           Container(
-                              color: _black,
+                              color: _c.card2,
                               child: Center(
                                 child: Text('NIKE',
                                     style: GoogleFonts.bebasNeue(
@@ -448,7 +419,7 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
                                     )),
                               )))
                   : Container(
-                      color: _black,
+                      color: _c.card2,
                       child: Center(
                         child: Text('NIKE',
                             style: GoogleFonts.bebasNeue(
@@ -468,7 +439,7 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
                 Text(shoe.snm,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: _body(14)
+                    style: _body(14, color: _c.text)
                         .copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 6),
                 Container(
@@ -501,14 +472,14 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.all(Radius.circular(14)),
+      decoration: BoxDecoration(
+        color: _c.card,
+        borderRadius: const BorderRadius.all(Radius.circular(14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Inside This Shoe', style: _heading(18)),
+          Text('Inside This Shoe', style: _heading(18, color: _c.text)),
           const SizedBox(height: 14),
           ...materials.entries.map((e) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
@@ -523,7 +494,7 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
                       ),
                     ),
                     const SizedBox(width: 10),
-                    Expanded(child: Text(e.key, style: _body(14))),
+                    Expanded(child: Text(e.key, style: _body(14, color: _c.text))),
                     Text('${e.value.toInt()}%',
                         style: _body(14, color: _lime)
                             .copyWith(fontWeight: FontWeight.w700)),
@@ -535,7 +506,6 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
     );
   }
 
-  // FIX 7: pills bounce with spring animation when tapped
   Widget _buildConditionSelector({
     required String title,
     required List<String> pills,
@@ -546,16 +516,16 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
       duration: const Duration(milliseconds: 250),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _card,
+        color: _c.card,
         borderRadius: BorderRadius.circular(14),
         border: selected != null
             ? const Border(left: BorderSide(color: _lime, width: 3))
-            : Border.all(color: _border, width: 0.5),
+            : Border.all(color: _c.border, width: 0.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: _heading(18)),
+          Text(title, style: _heading(18, color: _c.text)),
           const SizedBox(height: 14),
           Row(
             children: pills.map((pill) {
@@ -570,7 +540,6 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
                     child: GestureDetector(
                       onTap: () {
                         onSelect(pill);
-                        // Track tap for potential further animation
                         setState(() {
                           _pillTapCount[pill] =
                               (_pillTapCount[pill] ?? 0) + 1;
@@ -583,14 +552,14 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
                           color: isSelected ? _lime : Colors.transparent,
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: isSelected ? _lime : _border,
+                            color: isSelected ? _lime : _c.border,
                           ),
                         ),
                         child: Text(
                           pill,
                           textAlign: TextAlign.center,
                           style: _body(13,
-                                  color: isSelected ? _black : _white)
+                                  color: isSelected ? _black : _c.text)
                               .copyWith(
                                   fontWeight: isSelected
                                       ? FontWeight.w700
@@ -608,7 +577,6 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
     );
   }
 
-  // FIX 5: Estimated age dropdown
   Widget _buildAgeDropdown() {
     const options = [
       'Under 1 Year',
@@ -619,31 +587,31 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.all(Radius.circular(14)),
+      decoration: BoxDecoration(
+        color: _c.card,
+        borderRadius: const BorderRadius.all(Radius.circular(14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Estimated Age', style: _heading(18)),
+          Text('Estimated Age', style: _heading(18, color: _c.text)),
           const SizedBox(height: 14),
           DropdownButtonFormField<String>(
             value: _estimatedAge,
-            dropdownColor: _card,
-            style: _body(14),
+            dropdownColor: _c.card,
+            style: _body(14, color: _c.text),
             decoration: InputDecoration(
               filled: true,
-              fillColor: _black,
+              fillColor: _c.bg,
               contentPadding: const EdgeInsets.symmetric(
                   horizontal: 14, vertical: 12),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _border),
+                borderSide: BorderSide(color: _c.border),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _border),
+                borderSide: BorderSide(color: _c.border),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
@@ -653,7 +621,7 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
             items: options
                 .map((o) => DropdownMenuItem(
                       value: o,
-                      child: Text(o, style: _body(14)),
+                      child: Text(o, style: _body(14, color: _c.text)),
                     ))
                 .toList(),
             onChanged: (v) {
@@ -662,7 +630,6 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
             icon: const Icon(Icons.keyboard_arrow_down, color: _lime),
           ),
           const SizedBox(height: 10),
-          // Coin preview
           Row(
             children: [
               const Icon(Icons.stars, color: _lime, size: 16),
@@ -687,32 +654,31 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
     }
   }
 
-  // FIX 5: Cleaning required toggle
   Widget _buildCleaningToggle() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.all(Radius.circular(14)),
+      decoration: BoxDecoration(
+        color: _c.card,
+        borderRadius: const BorderRadius.all(Radius.circular(14)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text('Cleaning Required', style: _heading(18)),
+          Text('Cleaning Required', style: _heading(18, color: _c.text)),
           Row(
             children: [
               Text(
                 _cleaningReq ? 'Yes' : 'No',
                 style: _body(14,
-                    color: _cleaningReq ? _lime : _grey),
+                    color: _cleaningReq ? _lime : _c.sub),
               ),
               const SizedBox(width: 10),
               Switch(
                 value: _cleaningReq,
                 onChanged: (v) => setState(() => _cleaningReq = v),
                 activeColor: _lime,
-                inactiveThumbColor: _grey,
-                inactiveTrackColor: _border,
+                inactiveThumbColor: _c.sub,
+                inactiveTrackColor: _c.card2,
               ),
             ],
           ),
@@ -727,7 +693,7 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
       child: ElevatedButton(
         onPressed: _canRoute ? _runRouting : null,
         style: ElevatedButton.styleFrom(
-          backgroundColor: _canRoute ? _lime : _border,
+          backgroundColor: _canRoute ? _lime : _c.card2,
           foregroundColor: _black,
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
@@ -736,10 +702,8 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
         ),
         child: Text(
           'Route It.',
-          style: _body(16,
-                  color: _canRoute ? _black : _grey)
-              .copyWith(
-                  fontWeight: FontWeight.w900, letterSpacing: 0.5),
+          style: _body(16, color: _canRoute ? _black : _c.sub)
+              .copyWith(fontWeight: FontWeight.w900, letterSpacing: 0.5),
         ),
       ),
     );
@@ -748,7 +712,6 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Animated viewfinder widget (web / demo mode)
-// FIX 7: scan line has glowing blur effect
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _AnimatedViewfinder extends StatelessWidget {
@@ -767,10 +730,9 @@ class _AnimatedViewfinder extends StatelessWidget {
       height: 240,
       child: Stack(
         children: [
-          Container(color: const Color(0xFF111111).withOpacity(0.8)),
-          // Corner brackets
+          // Viewfinder always has dark background for QR scan readability
+          Container(color: Colors.black.withOpacity(0.85)),
           ..._corners(),
-          // Animated scan line with glow
           AnimatedBuilder(
             animation: scanLineAnim,
             builder: (_, __) => Positioned(
@@ -781,7 +743,6 @@ class _AnimatedViewfinder extends StatelessWidget {
                 height: 2,
                 decoration: BoxDecoration(
                   color: _lime,
-                  // FIX 7: glowing blur effect on scan line
                   boxShadow: [
                     BoxShadow(
                       color: _lime.withOpacity(0.9),

@@ -3,26 +3,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../nike_colors.dart';
 import '../models/shoe_model.dart';
 import 'customer_return_confirm_screen.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Colours
-// ─────────────────────────────────────────────────────────────────────────────
-const _black  = Color(0xFF111111);
-const _card   = Color(0xFF1A1A1A);
-const _lime   = Color(0xFFCDFC49);
-const _white  = Color(0xFFFFFFFF);
-const _grey   = Color(0xFF888888);
-const _border = Color(0xFF2A2A2A);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Font helpers
-// ─────────────────────────────────────────────────────────────────────────────
-TextStyle _heading(double size, {Color color = _white}) =>
-    GoogleFonts.bebasNeue(fontSize: size, color: color, letterSpacing: 1.5);
-TextStyle _body(double size, {Color color = _white}) =>
-    GoogleFonts.nunito(fontSize: size, color: color);
+const _lime  = Color(0xFFCDFC49);
+const _black = Color(0xFF111111);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen
@@ -43,6 +29,8 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
   bool       _loading = true;
   String?    _error;
 
+  NikeColors get _c => context.nc;
+
   @override
   void initState() {
     super.initState();
@@ -53,20 +41,18 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
     debugPrint('[ShoeDetail] received SUID: ${widget.suid}');
     try {
       final doc = await FirebaseFirestore.instance
-          .collection('Shoes') // capital S — always
+          .collection('Shoes')
           .doc(widget.suid)
           .get();
 
       final shoe = doc.exists ? ShoeModel.fromFirestore(doc) : null;
 
-      // Link shoe to logged-in customer if not already linked
       final currentUser = FirebaseAuth.instance.currentUser;
       if (shoe != null && currentUser != null) {
         final existingOwner = shoe.cuidLnk;
         if (existingOwner == currentUser.uid) {
-          // Already owned by this customer — no-op
+          // Already owned — no-op
         } else if (existingOwner.isNotEmpty) {
-          // Owned by a different customer — block and surface error
           if (mounted) {
             setState(() {
               _shoe    = null;
@@ -76,7 +62,6 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
           }
           return;
         } else {
-          // Unowned — link to this customer
           await FirebaseFirestore.instance
               .collection('Shoes')
               .doc(widget.suid)
@@ -116,31 +101,33 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = _c;
     return Scaffold(
-      backgroundColor: _black,
+      backgroundColor: c.bg,
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _lime))
           : _error != null
-              ? _buildError(_error!)
+              ? _buildError(_error!, c)
               : _shoe == null
-                  ? _buildNotFound()
-                  : _buildContent(_shoe!),
+                  ? _buildNotFound(c)
+                  : _buildContent(_shoe!, c),
     );
   }
 
-  Widget _buildError(String message) {
+  Widget _buildError(String message, NikeColors c) {
     final isOwnershipError =
         message == 'This shoe is already registered to another customer.';
     return Scaffold(
-      backgroundColor: _black,
+      backgroundColor: c.bg,
       appBar: AppBar(
-        backgroundColor: _card,
+        backgroundColor: c.card,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: _white),
+          icon: Icon(Icons.arrow_back_ios, color: c.text),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(isOwnershipError ? 'Already Registered' : 'Load Error',
-            style: _heading(20)),
+            style: GoogleFonts.bebasNeue(
+                fontSize: 20, color: c.text, letterSpacing: 1.5)),
       ),
       body: Center(
         child: Padding(
@@ -158,7 +145,7 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
                 isOwnershipError
                     ? 'This shoe belongs to someone else.'
                     : 'Could not load shoe data.',
-                style: _body(16),
+                style: GoogleFonts.nunito(fontSize: 16, color: c.text),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
@@ -166,7 +153,7 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
                 isOwnershipError
                     ? 'This shoe has already been registered by another customer and cannot be claimed.'
                     : 'Check Firestore security rules allow authenticated reads on the Shoes collection.\n\n$message',
-                style: _body(12, color: _grey),
+                style: GoogleFonts.nunito(fontSize: 12, color: c.sub),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
@@ -180,7 +167,8 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
                     backgroundColor: _lime,
                     foregroundColor: _black,
                   ),
-                  child: Text('Retry', style: _body(14, color: _black)),
+                  child: Text('Retry',
+                      style: GoogleFonts.nunito(fontSize: 14, color: _black)),
                 )
               else
                 ElevatedButton(
@@ -189,7 +177,8 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
                     backgroundColor: _lime,
                     foregroundColor: _black,
                   ),
-                  child: Text('Go Back', style: _body(14, color: _black)),
+                  child: Text('Go Back',
+                      style: GoogleFonts.nunito(fontSize: 14, color: _black)),
                 ),
             ],
           ),
@@ -198,29 +187,31 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
     );
   }
 
-  Widget _buildNotFound() {
+  Widget _buildNotFound(NikeColors c) {
     return Scaffold(
-      backgroundColor: _black,
+      backgroundColor: c.bg,
       appBar: AppBar(
-        backgroundColor: _card,
+        backgroundColor: c.card,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: _white),
+          icon: Icon(Icons.arrow_back_ios, color: c.text),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Shoe Not Found', style: _heading(20)),
+        title: Text('Shoe Not Found',
+            style: GoogleFonts.bebasNeue(
+                fontSize: 20, color: c.text, letterSpacing: 1.5)),
       ),
       body: Center(
           child: Text('No shoe with ID ${widget.suid}',
-              style: _body(14, color: _grey))),
+              style: GoogleFonts.nunito(fontSize: 14, color: c.sub))),
     );
   }
 
-  Widget _buildContent(ShoeModel shoe) {
+  Widget _buildContent(ShoeModel shoe, NikeColors c) {
     return Stack(
       children: [
         CustomScrollView(
           slivers: [
-            _buildAppBar(shoe),
+            _buildAppBar(shoe, c),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
@@ -228,36 +219,34 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 20),
-                    _buildHeadline(shoe),
+                    _buildHeadline(shoe, c),
                     const SizedBox(height: 16),
-                    _buildPassportCard(shoe),
+                    _buildPassportCard(shoe, c),
                     const SizedBox(height: 16),
-                    _buildTimeline(),
+                    _buildTimeline(c),
                   ],
                 ),
               ),
             ),
           ],
         ),
-        _buildBottomButton(shoe),
+        _buildBottomButton(shoe, c),
       ],
     );
   }
 
-  // ── App bar — FIX 7: shoe image scales from 80% to 100% elastic ──────────
-
-  Widget _buildAppBar(ShoeModel shoe) {
+  Widget _buildAppBar(ShoeModel shoe, NikeColors c) {
     return SliverAppBar(
       expandedHeight: 280,
-      backgroundColor: _black,
+      backgroundColor: c.bg,
       pinned: true,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios, color: _white),
+        icon: Icon(Icons.arrow_back_ios, color: c.text),
         onPressed: () => Navigator.pop(context),
       ),
       actions: [
         IconButton(
-          icon: const Icon(Icons.logout, color: _grey, size: 20),
+          icon: Icon(Icons.logout, color: c.sub, size: 20),
           onPressed: _signOut,
           tooltip: 'Sign Out',
         ),
@@ -265,7 +254,6 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
       flexibleSpace: FlexibleSpaceBar(
         background: Stack(
           children: [
-            // FIX 7: Shoe image elastic scale
             Positioned.fill(
               child: shoe.snmImg.isNotEmpty
                   ? Image.network(
@@ -273,7 +261,7 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
                       fit: BoxFit.contain,
                       errorBuilder: (_, __, ___) =>
                           Container(
-                            color: _black,
+                            color: c.bg,
                             child: Center(
                               child: Text(
                                 'NIKE',
@@ -293,16 +281,14 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
                         duration: 800.ms,
                         curve: Curves.elasticOut,
                       )
-                  : const Icon(Icons.directions_run,
-                      color: _lime, size: 80),
+                  : const Icon(Icons.directions_run, color: _lime, size: 80),
             ),
-            // Top header bar
             Positioned(
               top: 0,
               left: 0,
               right: 0,
               child: Container(
-                color: _card,
+                color: c.card,
                 padding: EdgeInsets.only(
                   top: MediaQuery.of(context).padding.top + 8,
                   left: 56,
@@ -311,7 +297,8 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
                 ),
                 child: Center(
                   child: Text('NIKE RERUN',
-                      style: _heading(20, color: _lime)),
+                      style: GoogleFonts.bebasNeue(
+                          fontSize: 20, color: _lime, letterSpacing: 1.5)),
                 ),
               ),
             ),
@@ -321,13 +308,13 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
     );
   }
 
-  // ── Headline ──────────────────────────────────────────────────────────────
-
-  Widget _buildHeadline(ShoeModel shoe) {
+  Widget _buildHeadline(ShoeModel shoe, NikeColors c) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(shoe.snmHdl, style: _heading(48))
+        Text(shoe.snmHdl,
+            style: GoogleFonts.bebasNeue(
+                fontSize: 48, color: c.text, letterSpacing: 1.5))
             .animate()
             .fadeIn(duration: 500.ms)
             .slideY(begin: 0.2, end: 0, duration: 500.ms),
@@ -335,22 +322,23 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
         Row(
           children: [
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: _lime,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text('Eco Tracked',
-                  style: _body(13, color: _black)
-                      .copyWith(fontWeight: FontWeight.w700)),
+                  style: GoogleFonts.nunito(
+                      fontSize: 13, color: _black,
+                      fontWeight: FontWeight.w700)),
             )
                 .animate(onPlay: (c) => c.repeat(reverse: true))
                 .shimmer(
                     duration: 2000.ms,
-                    color: _white.withOpacity(0.3)),
+                    color: Colors.white.withOpacity(0.3)),
             const SizedBox(width: 10),
-            Text(shoe.suid, style: _body(12, color: _grey))
+            Text(shoe.suid,
+                style: GoogleFonts.nunito(fontSize: 12, color: c.sub))
                 .animate()
                 .fadeIn(delay: 200.ms),
           ],
@@ -359,9 +347,7 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
     );
   }
 
-  // ── Passport card — FIX 7: rows stagger in with 150ms delays ─────────────
-
-  Widget _buildPassportCard(ShoeModel shoe) {
+  Widget _buildPassportCard(ShoeModel shoe, NikeColors c) {
     final rows = [
       _PassportRow('Built With', _materialString(shoe), false),
       _PassportRow('Born In',    shoe.mfgCtr,           false),
@@ -370,9 +356,9 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
     ];
 
     return Container(
-      decoration: const BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.all(Radius.circular(14)),
+      decoration: BoxDecoration(
+        color: c.card,
+        borderRadius: const BorderRadius.all(Radius.circular(14)),
         border: Border(top: BorderSide(color: _lime, width: 2)),
       ),
       child: Column(
@@ -384,17 +370,18 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
               children: [
                 Container(width: 4, height: 20, color: _lime),
                 const SizedBox(width: 10),
-                Text("Your Shoe's Story", style: _heading(20)),
+                Text("Your Shoe's Story",
+                    style: GoogleFonts.bebasNeue(
+                        fontSize: 20, color: c.text, letterSpacing: 1.5)),
               ],
             ),
           ),
           const SizedBox(height: 12),
-          const Divider(color: _border, height: 1),
+          Divider(color: c.border, height: 1),
           const SizedBox(height: 8),
-          // FIX 7: staggered rows
           ...rows.asMap().entries.map((e) {
             final delay = 300 + e.key * 150;
-            return _buildPassportRow(e.value, delay);
+            return _buildPassportRow(e.value, delay, c);
           }),
           const SizedBox(height: 8),
         ],
@@ -404,17 +391,19 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
         .fadeIn(delay: 200.ms, duration: 400.ms);
   }
 
-  Widget _buildPassportRow(_PassportRow row, int delayMs) {
+  Widget _buildPassportRow(_PassportRow row, int delayMs, NikeColors c) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(row.label, style: _body(15, color: _grey)),
+          Text(row.label,
+              style: GoogleFonts.nunito(fontSize: 15, color: c.sub)),
           Text(row.value,
-              style: _body(15,
-                      color: row.isEco ? _lime : _white)
-                  .copyWith(fontWeight: FontWeight.w600)),
+              style: GoogleFonts.nunito(
+                  fontSize: 15,
+                  color: row.isEco ? _lime : c.text,
+                  fontWeight: FontWeight.w600)),
         ],
       ),
     )
@@ -436,19 +425,19 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
     return parts.take(2).join(' · ');
   }
 
-  // ── Timeline — FIX 7: dots animate at 0ms, 300ms, 600ms ──────────────────
-
-  Widget _buildTimeline() {
+  Widget _buildTimeline(NikeColors c) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.all(Radius.circular(14)),
+      decoration: BoxDecoration(
+        color: c.card2,
+        borderRadius: const BorderRadius.all(Radius.circular(14)),
       ),
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('The Journey', style: _heading(22)),
+          Text('The Journey',
+              style: GoogleFonts.bebasNeue(
+                  fontSize: 22, color: c.text, letterSpacing: 1.5)),
           const SizedBox(height: 20),
           Row(
             children: [
@@ -463,9 +452,9 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _TimelineLabel('MADE',             active: false),
-              _TimelineLabel('YOURS',            active: false),
-              _TimelineLabel('CLOSE\nTHE LOOP',  active: true),
+              _TimelineLabel('MADE',            active: false),
+              _TimelineLabel('YOURS',           active: false),
+              _TimelineLabel('CLOSE\nTHE LOOP', active: true),
             ],
           ),
         ],
@@ -490,20 +479,14 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
             ? _lime
             : done
                 ? _lime.withOpacity(0.4)
-                : _border,
+                : _c.border,
         boxShadow: active
-            ? [
-                BoxShadow(
-                    color: _lime.withOpacity(0.5),
-                    blurRadius: 10,
-                    spreadRadius: 2)
-              ]
+            ? [BoxShadow(color: _lime.withOpacity(0.5), blurRadius: 10, spreadRadius: 2)]
             : null,
       ),
     );
 
     if (active) {
-      // FIX 7: pulse glow repeating
       return dot
           .animate(onPlay: (c) => c.repeat(reverse: true))
           .scaleXY(begin: 1.0, end: 1.3, duration: 1000.ms)
@@ -526,14 +509,12 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
     return Expanded(
       child: Container(
         height: 2,
-        color: filled ? _lime.withOpacity(0.4) : _border,
+        color: filled ? _lime.withOpacity(0.4) : _c.border,
       ),
     );
   }
 
-  // ── Bottom button — FIX 7: pulses 100%→103% on repeat ────────────────────
-
-  Widget _buildBottomButton(ShoeModel shoe) {
+  Widget _buildBottomButton(ShoeModel shoe, NikeColors c) {
     return Positioned(
       bottom: 0,
       left: 0,
@@ -546,8 +527,8 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
           bottom: MediaQuery.of(context).padding.bottom + 12,
         ),
         decoration: BoxDecoration(
-          color: _black,
-          border: const Border(top: BorderSide(color: _border)),
+          color: c.bg,
+          border: Border(top: BorderSide(color: c.border)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -580,11 +561,11 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
                   elevation: 0,
                 ),
                 child: Text('Close The Loop.',
-                    style: _body(17, color: _black)
-                        .copyWith(fontWeight: FontWeight.w900)),
+                    style: GoogleFonts.nunito(
+                        fontSize: 17, color: _black,
+                        fontWeight: FontWeight.w900)),
               ),
             )
-                // FIX 7: button pulses 100%→103%
                 .animate(onPlay: (c) => c.repeat(reverse: true))
                 .scaleXY(begin: 1.0, end: 1.03, duration: 1000.ms,
                     curve: Curves.easeInOut)
@@ -592,7 +573,7 @@ class _CustomerShoeDetailScreenState extends State<CustomerShoeDetailScreen> {
                 .fadeIn(delay: 800.ms, duration: 400.ms),
             const SizedBox(height: 6),
             Text('Return It. Earn ${shoe.rwdAmt} NikeCoins.',
-                    style: _body(13, color: _lime))
+                    style: GoogleFonts.nunito(fontSize: 13, color: _lime))
                 .animate()
                 .fadeIn(delay: 900.ms, duration: 400.ms),
           ],
@@ -632,7 +613,7 @@ class _TimelineLabel extends StatelessWidget {
         textAlign: TextAlign.center,
         style: GoogleFonts.nunito(
           fontSize: 12,
-          color: active ? _lime : _grey,
+          color: active ? _lime : context.nc.sub,
           fontWeight: active ? FontWeight.w700 : FontWeight.w600,
           letterSpacing: 0.3,
         ),

@@ -1,30 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../nike_colors.dart';
 import '../models/shoe_model.dart';
 import 'customer_return_success_screen.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Colours
-// ─────────────────────────────────────────────────────────────────────────────
-const _black  = Color(0xFF111111);
-const _card   = Color(0xFF1A1A1A);
-const _lime   = Color(0xFFCDFC49);
-const _white  = Color(0xFFFFFFFF);
-const _grey   = Color(0xFF888888);
-const _border = Color(0xFF2A2A2A);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Font helpers
-// ─────────────────────────────────────────────────────────────────────────────
-TextStyle _heading(double size, {Color color = _white}) =>
-    GoogleFonts.bebasNeue(fontSize: size, color: color, letterSpacing: 1.5);
-TextStyle _body(double size, {Color color = _white}) =>
-    GoogleFonts.nunito(fontSize: size, color: color);
+const _lime  = Color(0xFFCDFC49);
+const _black = Color(0xFF111111);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen
@@ -45,8 +32,9 @@ class _CustomerReturnConfirmScreenState
     with SingleTickerProviderStateMixin {
   bool _loading = false;
 
-  // FIX 7: rotating recycling icon
-  late AnimationController _rotateCtrl;
+  late final AnimationController _rotateCtrl;
+
+  NikeColors get _c => context.nc;
 
   @override
   void initState() {
@@ -63,7 +51,7 @@ class _CustomerReturnConfirmScreenState
     super.dispose();
   }
 
-  // ── Confirm return ────────────────────────────────────────────────────────
+  // ── Firestore + email ────────────────────────────────────────────────────
 
   static const _webhookUrl =
       'https://hook.eu1.make.com/weifl2piodeq3xh37j3gbpj8ai6g1ep3';
@@ -83,29 +71,26 @@ class _CustomerReturnConfirmScreenState
           'coinsEarned': coinsEarned,
         }),
       );
-      debugPrint('[Email] Confirmation sent to $email');
     } catch (e) {
-      // Non-blocking — email failure should not stop the return flow
       debugPrint('[Email] Failed to send confirmation: $e');
     }
   }
 
   Future<void> _confirmReturn() async {
+    HapticFeedback.mediumImpact();
     setState(() => _loading = true);
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     try {
-      // 1. Update shoe document in Firestore Shoes collection
       await FirebaseFirestore.instance
-          .collection('Shoes') // capital S — always
+          .collection('Shoes')
           .doc(widget.shoe.suid)
           .update({
         'LCS-STS': 'LOOP CLOSED.',
         'RTE-DCN': 'RETURN INITIATED.',
       });
 
-      // 2. Update user document — add SUID to LCS-RTN and increment RWD-NCB
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -114,7 +99,6 @@ class _CustomerReturnConfirmScreenState
         'RWD-NCB': FieldValue.increment(widget.shoe.rwdAmt),
       });
 
-      // 3. Fire confirmation email via Make.com webhook (non-blocking)
       final email = user.email ?? '';
       if (email.isNotEmpty) {
         await _sendConfirmationEmail(
@@ -133,7 +117,7 @@ class _CustomerReturnConfirmScreenState
             transitionsBuilder: (_, anim, __, child) => FadeTransition(
               opacity: anim,
               child: ScaleTransition(
-                scale: Tween<double>(begin: 0.9, end: 1.0).animate(
+                scale: Tween<double>(begin: 0.92, end: 1.0).animate(
                   CurvedAnimation(parent: anim, curve: Curves.easeOutCubic),
                 ),
                 child: child,
@@ -146,11 +130,12 @@ class _CustomerReturnConfirmScreenState
     } catch (e) {
       if (mounted) {
         setState(() => _loading = false);
+        final c = _c;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error confirming return. Try again.',
-                style: _body(14)),
-            backgroundColor: _card,
+            content: Text('Something went wrong. Try again.',
+                style: GoogleFonts.nunito(fontSize: 14, color: c.text)),
+            backgroundColor: c.card,
           ),
         );
       }
@@ -161,179 +146,328 @@ class _CustomerReturnConfirmScreenState
 
   @override
   Widget build(BuildContext context) {
+    final c = _c;
     return Scaffold(
-      backgroundColor: _black,
+      backgroundColor: c.bg,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            children: [
-              const SizedBox(height: 20),
-              _buildTopBar(),
-              Expanded(
+        child: Column(
+          children: [
+            _buildTopBar(c),
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _buildRotatingIcon(),
-                    const SizedBox(height: 24),
-                    Text('CLOSING\nTHE LOOP.',
-                            style: _heading(34),
-                            textAlign: TextAlign.center)
-                        .animate()
-                        .fadeIn(delay: 200.ms, duration: 400.ms)
-                        .slideY(begin: 0.2, end: 0, duration: 400.ms),
                     const SizedBox(height: 32),
-                    // FIX 7: summary card slides up from bottom with fade 600ms
-                    _buildSummaryCard()
-                        .animate()
-                        .fadeIn(delay: 300.ms, duration: 600.ms)
-                        .slideY(begin: 0.3, end: 0, duration: 600.ms,
-                            curve: Curves.easeOutCubic),
+                    _buildRecycleAnimation(),
+                    const SizedBox(height: 20),
+                    _buildHeadline(c),
+                    const SizedBox(height: 32),
+                    _buildShoeCard(c),
+                    const SizedBox(height: 20),
+                    _buildCoinsCard(c),
+                    const SizedBox(height: 36),
+                    _buildButtons(c),
                   ],
                 ),
               ),
-              _buildButtons(),
-              const SizedBox(height: 24),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTopBar() {
-    return Row(
-      children: [
-        IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: _white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        const Spacer(),
-        Text('NIKE RERUN', style: _heading(20, color: _lime)),
-        const Spacer(),
-        const SizedBox(width: 48),
-      ],
-    );
-  }
-
-  // FIX 7: continuously rotating recycling icon
-  Widget _buildRotatingIcon() {
-    return RotationTransition(
-      turns: _rotateCtrl,
-      child: Container(
-        width: 80,
-        height: 80,
-        decoration: BoxDecoration(
-          color: _lime.withOpacity(0.15),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(Icons.recycling, color: _lime, size: 44),
-      ),
-    )
-        .animate()
-        .scale(
-          begin: const Offset(0.3, 0.3),
-          duration: 600.ms,
-          curve: Curves.elasticOut,
-        );
-  }
-
-  Widget _buildSummaryCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
-      ),
-      child: Column(
-        children: [
-          // Shoe image small
-          if (widget.shoe.snmImg.isNotEmpty)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: SizedBox(
-                height: 80,
-                child: Image.network(
-                  widget.shoe.snmImg,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) =>
-                      const Icon(Icons.directions_run, color: _lime, size: 40),
-                ),
-              ),
             ),
-          const SizedBox(height: 12),
-          Text(widget.shoe.snm,
-              textAlign: TextAlign.center,
-              style: _body(15).copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 16),
-          const Divider(color: _border, height: 1),
-          const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.stars, color: _lime, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'You will earn ${widget.shoe.rwdAmt} NikeCoins.',
-                style: _body(17, color: _lime)
-                    .copyWith(fontWeight: FontWeight.w700),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopBar(NikeColors c) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              Navigator.of(context).pop();
+            },
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: c.card,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: c.border),
               ),
-            ],
+              child: Icon(Icons.arrow_back, color: c.text, size: 20),
+            ),
           ),
+          const Spacer(),
+          Text('NIKE RERUN',
+              style: GoogleFonts.bebasNeue(
+                  fontSize: 18, color: _lime, letterSpacing: 1.5)),
+          const Spacer(),
+          const SizedBox(width: 40),
         ],
       ),
     );
   }
 
-  Widget _buildButtons() {
+  Widget _buildRecycleAnimation() {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Container(
+          width: 120,
+          height: 120,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _lime.withOpacity(0.06),
+            border: Border.all(color: _lime.withOpacity(0.15), width: 1),
+          ),
+        ),
+        RotationTransition(
+          turns: _rotateCtrl,
+          child: Container(
+            width: 88,
+            height: 88,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _lime.withOpacity(0.12),
+              border: Border.all(
+                color: _lime.withOpacity(0.4),
+                width: 1.5,
+                strokeAlign: BorderSide.strokeAlignOutside,
+              ),
+            ),
+          ),
+        ),
+        Container(
+          width: 72,
+          height: 72,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _lime.withOpacity(0.18),
+          ),
+          child: const Icon(Icons.recycling, color: _lime, size: 38),
+        ),
+      ],
+    )
+        .animate()
+        .scale(
+          begin: const Offset(0.3, 0.3),
+          end: const Offset(1.0, 1.0),
+          duration: 600.ms,
+          curve: Curves.elasticOut,
+        )
+        .fadeIn(duration: 400.ms);
+  }
+
+  Widget _buildHeadline(NikeColors c) {
+    return Column(
+      children: [
+        Text(
+          'CLOSING\nTHE LOOP.',
+          style: GoogleFonts.bebasNeue(
+              fontSize: 40, color: c.text, letterSpacing: 1.5),
+          textAlign: TextAlign.center,
+        )
+            .animate()
+            .fadeIn(delay: 200.ms, duration: 400.ms)
+            .slideY(begin: 0.15, end: 0, delay: 200.ms, duration: 400.ms,
+                curve: Curves.easeOutCubic),
+        const SizedBox(height: 8),
+        Text(
+          'Review your return below.',
+          style: GoogleFonts.nunito(fontSize: 14, color: c.sub),
+          textAlign: TextAlign.center,
+        )
+            .animate()
+            .fadeIn(delay: 320.ms, duration: 350.ms),
+      ],
+    );
+  }
+
+  Widget _buildShoeCard(NikeColors c) {
+    return Container(
+      decoration: BoxDecoration(
+        color: c.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: c.border),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: const BorderRadius.horizontal(
+                left: Radius.circular(16)),
+            child: Container(
+              width: 110,
+              height: 110,
+              color: c.bg,
+              child: widget.shoe.snmImg.isNotEmpty
+                  ? Image.network(
+                      widget.shoe.snmImg,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Icon(
+                          Icons.directions_run, color: _lime, size: 40),
+                    )
+                  : const Icon(Icons.directions_run, color: _lime, size: 40),
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (widget.shoe.snmHdl.isNotEmpty)
+                    Text(widget.shoe.snmHdl,
+                        style: GoogleFonts.nunito(
+                            fontSize: 10, color: c.sub,
+                            letterSpacing: 0.4),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 2),
+                  Text(widget.shoe.snm,
+                      style: GoogleFonts.bebasNeue(
+                          fontSize: 18, color: c.text, letterSpacing: 1.5),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.eco_outlined, color: _lime, size: 13),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${widget.shoe.ecoCo2.toStringAsFixed(1)} kg CO₂',
+                        style: GoogleFonts.nunito(
+                            fontSize: 11, color: _lime,
+                            fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    )
+        .animate()
+        .fadeIn(delay: 380.ms, duration: 400.ms)
+        .slideY(begin: 0.12, end: 0, delay: 380.ms, duration: 400.ms,
+            curve: Curves.easeOutCubic);
+  }
+
+  Widget _buildCoinsCard(NikeColors c) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+      decoration: BoxDecoration(
+        color: _lime.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _lime.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.stars_rounded, color: _lime, size: 28),
+              const SizedBox(width: 10),
+              Text(
+                '${widget.shoe.rwdAmt}',
+                style: GoogleFonts.bebasNeue(
+                    fontSize: 56, color: _lime, letterSpacing: 1.5),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'NikeCoins you\'ll earn',
+            style: GoogleFonts.nunito(
+                fontSize: 14, color: c.sub,
+                fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    )
+        .animate()
+        .fadeIn(delay: 460.ms, duration: 400.ms)
+        .slideY(begin: 0.1, end: 0, delay: 460.ms, duration: 400.ms,
+            curve: Curves.easeOutCubic);
+  }
+
+  Widget _buildButtons(NikeColors c) {
     return Column(
       children: [
         SizedBox(
           width: double.infinity,
-          child: ElevatedButton(
-            onPressed: _loading ? null : _confirmReturn,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _lime,
-              foregroundColor: _black,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              elevation: 0,
+          child: GestureDetector(
+            onTap: _loading ? null : _confirmReturn,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              decoration: BoxDecoration(
+                color: _loading ? _lime.withOpacity(0.65) : _lime,
+                borderRadius: BorderRadius.circular(50),
+                boxShadow: _loading
+                    ? []
+                    : [
+                        BoxShadow(
+                          color: _lime.withOpacity(0.3),
+                          blurRadius: 20,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+              ),
+              child: _loading
+                  ? const Center(
+                      child: SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                            color: _black, strokeWidth: 2.5),
+                      ),
+                    )
+                  : Text(
+                      'CONFIRM RETURN',
+                      style: GoogleFonts.bebasNeue(
+                          fontSize: 20, color: _black, letterSpacing: 1.5),
+                      textAlign: TextAlign.center,
+                    ),
             ),
-            child: _loading
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                        color: _black, strokeWidth: 2))
-                : Text('Confirm Return.',
-                    style: _body(17, color: _black)
-                        .copyWith(fontWeight: FontWeight.w800)),
           ),
         )
             .animate()
-            .fadeIn(delay: 500.ms, duration: 400.ms)
-            .slideY(begin: 0.1, end: 0, duration: 400.ms),
+            .fadeIn(delay: 540.ms, duration: 400.ms)
+            .slideY(begin: 0.1, end: 0, delay: 540.ms, duration: 400.ms,
+                curve: Curves.easeOutCubic),
+
         const SizedBox(height: 12),
+
         SizedBox(
           width: double.infinity,
-          child: OutlinedButton(
-            onPressed: () => Navigator.pop(context),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _white,
-              side: const BorderSide(color: _border),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+          child: GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              Navigator.of(context).pop();
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(50),
+                border: Border.all(color: c.border),
+              ),
+              child: Text(
+                'NOT YET',
+                style: GoogleFonts.bebasNeue(
+                    fontSize: 18, color: c.sub, letterSpacing: 1.5),
+                textAlign: TextAlign.center,
+              ),
             ),
-            child: Text('Not yet.',
-                style: _body(15, color: _white)),
           ),
         )
             .animate()
-            .fadeIn(delay: 600.ms, duration: 400.ms),
+            .fadeIn(delay: 620.ms, duration: 350.ms),
       ],
     );
   }

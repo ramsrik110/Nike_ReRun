@@ -8,6 +8,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:lottie/lottie.dart';
 import 'firebase_options.dart';
+import 'nike_colors.dart';
+import 'theme_notifier.dart';
 import 'screens/login_screen.dart';
 import 'screens/customer_home_screen.dart';
 import 'screens/customer_landing_screen.dart';
@@ -17,6 +19,8 @@ import 'screens/hub_inspector_screen.dart';
 import 'screens/inspector_profile_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/admin_profile_screen.dart';
+import 'widgets/chatbot_widget.dart';
+import 'services/chatbot_service.dart';
 
 // NOTE: bulkUploadEverything() is intentionally commented out.
 // Database is already fully populated — do not uncomment.
@@ -27,6 +31,7 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  await loadThemePreference();
   // final firebaseService = FirebaseService();
   // await firebaseService.bulkUploadEverything();
   runApp(const NikeReRunApp());
@@ -36,26 +41,47 @@ void main() async {
 // App root
 // ─────────────────────────────────────────────────────────────────────────────
 
+final _darkTheme = ThemeData(
+  brightness: Brightness.dark,
+  scaffoldBackgroundColor: const Color(0xFF111111),
+  primaryColor: const Color(0xFFCDFC49),
+  colorScheme: const ColorScheme.dark(
+    primary: Color(0xFFCDFC49),
+    surface: Color(0xFF1A1A1A),
+  ),
+  splashColor: Colors.transparent,
+  highlightColor: Colors.transparent,
+  textTheme: GoogleFonts.nunitoTextTheme(ThemeData.dark().textTheme),
+  extensions: const [NikeColors.dark],
+);
+
+final _lightTheme = ThemeData(
+  brightness: Brightness.light,
+  scaffoldBackgroundColor: const Color(0xFFFFFFFF),
+  primaryColor: const Color(0xFFCDFC49),
+  colorScheme: const ColorScheme.light(
+    primary: Color(0xFFCDFC49),
+    surface: Color(0xFFF2F2F2),
+  ),
+  splashColor: Colors.transparent,
+  highlightColor: Colors.transparent,
+  textTheme: GoogleFonts.nunitoTextTheme(ThemeData.light().textTheme),
+  extensions: const [NikeColors.light],
+);
+
 class NikeReRunApp extends StatelessWidget {
   const NikeReRunApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Nike ReRun',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        scaffoldBackgroundColor: const Color(0xFF111111),
-        primaryColor: const Color(0xFFCDFC49),
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFFCDFC49),
-          surface: Color(0xFF1A1A1A),
-        ),
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
-        textTheme: GoogleFonts.nunitoTextTheme(ThemeData.dark().textTheme),
+    return ValueListenableBuilder<bool>(
+      valueListenable: isDarkMode,
+      builder: (_, dark, __) => MaterialApp(
+        title: 'Nike ReRun',
+        debugShowCheckedModeBanner: false,
+        theme: dark ? _darkTheme : _lightTheme,
+        home: const _AuthGate(),
       ),
-      home: const _AuthGate(),
     );
   }
 }
@@ -254,8 +280,9 @@ class _CustomerShellState extends State<CustomerShell> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.nc;
     return Scaffold(
-      backgroundColor: const Color(0xFF111111),
+      backgroundColor: c.bg,
       body: Stack(
         children: [
           IndexedStack(
@@ -263,28 +290,29 @@ class _CustomerShellState extends State<CustomerShell> {
             children: [
               CustomerLandingScreen(onScanTap: () => setState(() => _index = 1)),
               CustomerScanScreen(isActive: _index == 1),
-              const CustomerProfileScreen(),
+              CustomerProfileScreen(onScanTap: () => setState(() => _index = 1)),
             ],
           ),
           Positioned(
             left: 16,
             right: 16,
             bottom: 24,
-            child: _buildFloatingNavBar(),
+            child: _buildFloatingNavBar(c),
           ),
+          const ChatbotWidget(persona: ChatPersona.customer),
         ],
       ),
     );
   }
 
-  Widget _buildFloatingNavBar() {
+  Widget _buildFloatingNavBar(NikeColors c) {
     return SafeArea(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
+          color: c.card,
           borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: const Color(0xFF2A2A2A)),
+          border: Border.all(color: c.border),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.6),
@@ -343,8 +371,9 @@ class _InspectorShellState extends State<InspectorShell> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.nc;
     return Scaffold(
-      backgroundColor: const Color(0xFF111111),
+      backgroundColor: c.bg,
       body: Stack(
         children: [
           IndexedStack(
@@ -358,21 +387,22 @@ class _InspectorShellState extends State<InspectorShell> {
             left: 16,
             right: 16,
             bottom: 24,
-            child: _buildFloatingNavBar(),
+            child: _buildFloatingNavBar(c),
           ),
+          const ChatbotWidget(persona: ChatPersona.inspector),
         ],
       ),
     );
   }
 
-  Widget _buildFloatingNavBar() {
+  Widget _buildFloatingNavBar(NikeColors c) {
     return SafeArea(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
+          color: c.card,
           borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: const Color(0xFF2A2A2A)),
+          border: Border.all(color: c.border),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.6),
@@ -423,8 +453,9 @@ class _AdminShellState extends State<AdminShell> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.nc;
     return Scaffold(
-      backgroundColor: const Color(0xFF111111),
+      backgroundColor: c.bg,
       body: Stack(
         children: [
           IndexedStack(
@@ -438,21 +469,22 @@ class _AdminShellState extends State<AdminShell> {
             left: 16,
             right: 16,
             bottom: 24,
-            child: _buildFloatingNavBar(),
+            child: _buildFloatingNavBar(c),
           ),
+          const ChatbotWidget(persona: ChatPersona.admin),
         ],
       ),
     );
   }
 
-  Widget _buildFloatingNavBar() {
+  Widget _buildFloatingNavBar(NikeColors c) {
     return SafeArea(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
+          color: c.card,
           borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: const Color(0xFF2A2A2A)),
+          border: Border.all(color: c.border),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.6),
@@ -572,6 +604,7 @@ class _CustomerScanScreenState extends State<CustomerScanScreen>
   Future<void> _navigateToShoe(String suid) async {
     if (!mounted) return;
     setState(() => _fetchLoading = true);
+    final c = context.nc;
     try {
       final doc = await FirebaseFirestore.instance
           .collection('Shoes') // capital S — always
@@ -586,7 +619,7 @@ class _CustomerScanScreenState extends State<CustomerScanScreen>
           SnackBar(
             content: Text('No shoe found for ID: $suid',
                 style: GoogleFonts.nunito(color: Colors.white, fontSize: 14)),
-            backgroundColor: const Color(0xFF1A1A1A),
+            backgroundColor: c.card,
           ),
         );
         _navigating = false;
@@ -618,34 +651,35 @@ class _CustomerScanScreenState extends State<CustomerScanScreen>
 
   void _openManualEntry() {
     final ctrl = TextEditingController();
+    final c = context.nc;
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
+        backgroundColor: c.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Enter Shoe ID',
             style: GoogleFonts.bebasNeue(
-                fontSize: 22, color: Colors.white, letterSpacing: 1.2)),
+                fontSize: 22, color: c.text, letterSpacing: 1.2)),
         content: TextField(
           controller: ctrl,
           autofocus: true,
-          style: GoogleFonts.nunito(color: Colors.white),
+          style: GoogleFonts.nunito(color: c.text),
           decoration: InputDecoration(
             hintText: 'e.g. NR-2024-AM90-0006',
-            hintStyle: GoogleFonts.nunito(color: const Color(0xFF888888)),
-            enabledBorder: const OutlineInputBorder(
-                borderSide: BorderSide(color: Color(0xFF2A2A2A))),
+            hintStyle: GoogleFonts.nunito(color: c.sub),
+            enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: c.border)),
             focusedBorder: const OutlineInputBorder(
                 borderSide: BorderSide(color: Color(0xFFCDFC49), width: 2)),
             filled: true,
-            fillColor: const Color(0xFF111111),
+            fillColor: c.bg,
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text('Cancel',
-                style: GoogleFonts.nunito(color: const Color(0xFF888888))),
+                style: GoogleFonts.nunito(color: c.sub)),
           ),
           TextButton(
             onPressed: () async {
@@ -671,12 +705,13 @@ class _CustomerScanScreenState extends State<CustomerScanScreen>
 
   @override
   Widget build(BuildContext context) {
+    final c = context.nc;
     return Scaffold(
-      backgroundColor: const Color(0xFF111111),
+      backgroundColor: c.bg,
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(),
+            _buildHeader(c),
             Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -685,14 +720,14 @@ class _CustomerScanScreenState extends State<CustomerScanScreen>
                     'Scan The Label.',
                     style: GoogleFonts.bebasNeue(
                         fontSize: 38,
-                        color: Colors.white,
+                        color: c.text,
                         letterSpacing: 1),
                   ).animate().fadeIn(duration: 400.ms),
                   const SizedBox(height: 8),
                   Text(
                     'Point your camera at the shoe\'s QR code.',
                     style: GoogleFonts.nunito(
-                        fontSize: 14, color: const Color(0xFF888888)),
+                        fontSize: 14, color: c.sub),
                   ).animate().fadeIn(delay: 150.ms, duration: 400.ms),
                   const SizedBox(height: 32),
                   _buildScannerBox(),
@@ -724,10 +759,10 @@ class _CustomerScanScreenState extends State<CustomerScanScreen>
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(NikeColors c) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      color: const Color(0xFF1A1A1A),
+      color: c.card,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -735,15 +770,14 @@ class _CustomerScanScreenState extends State<CustomerScanScreen>
             children: [
               Text('Scan Mode',
                   style: GoogleFonts.bebasNeue(
-                      fontSize: 22, color: Colors.white, letterSpacing: 1.2)),
+                      fontSize: 22, color: c.text, letterSpacing: 1.2)),
               const SizedBox(width: 10),
               const Icon(Icons.qr_code_scanner,
                   color: Color(0xFFCDFC49), size: 20),
             ],
           ),
           IconButton(
-            icon: const Icon(Icons.logout,
-                color: Color(0xFF888888), size: 20),
+            icon: Icon(Icons.logout, color: c.sub, size: 20),
             onPressed: _signOut,
             tooltip: 'Sign Out',
           ),
@@ -827,25 +861,24 @@ class _CustomerScanScreenState extends State<CustomerScanScreen>
   }
 
   Widget _buildCameraError() {
+    final c = context.nc;
     return Container(
-      color: const Color(0xFF1A1A1A),
+      color: c.card,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.camera_alt_outlined,
-              color: Color(0xFF888888), size: 48),
+          Icon(Icons.camera_alt_outlined, color: c.sub, size: 48),
           const SizedBox(height: 12),
           Text(
             'Camera unavailable.',
-            style: GoogleFonts.nunito(
-                color: const Color(0xFF888888), fontSize: 14),
+            style: GoogleFonts.nunito(color: c.sub, fontSize: 14),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 4),
           Text(
             'Allow camera in browser\nor use manual entry below.',
             style: GoogleFonts.nunito(
-                color: const Color(0xFF555555), fontSize: 12),
+                color: c.sub.withOpacity(0.6), fontSize: 12),
             textAlign: TextAlign.center,
           ),
         ],
@@ -946,6 +979,7 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = index == current;
+    final sub = context.nc.sub;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -959,9 +993,7 @@ class _NavItem extends StatelessWidget {
               child: Icon(
                 active ? activeIcon : icon,
                 key: ValueKey(active),
-                color: active
-                    ? const Color(0xFFCDFC49)
-                    : const Color(0xFF888888),
+                color: active ? const Color(0xFFCDFC49) : sub,
                 size: 22,
               ),
             ),
@@ -970,11 +1002,8 @@ class _NavItem extends StatelessWidget {
               label,
               style: GoogleFonts.nunito(
                 fontSize: 11,
-                color: active
-                    ? const Color(0xFFCDFC49)
-                    : const Color(0xFF888888),
-                fontWeight:
-                    active ? FontWeight.w700 : FontWeight.w400,
+                color: active ? const Color(0xFFCDFC49) : sub,
+                fontWeight: active ? FontWeight.w700 : FontWeight.w400,
               ),
             ),
           ],

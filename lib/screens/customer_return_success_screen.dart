@@ -2,22 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lottie/lottie.dart';
-// ─────────────────────────────────────────────────────────────────────────────
-// Colours
-// ─────────────────────────────────────────────────────────────────────────────
-const _black  = Color(0xFF111111);
-const _lime   = Color(0xFFCDFC49);
-const _white  = Color(0xFFFFFFFF);
-const _grey   = Color(0xFF888888);
-const _border = Color(0xFF2A2A2A);
+import '../nike_colors.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Font helpers
-// ─────────────────────────────────────────────────────────────────────────────
-TextStyle _heading(double size, {Color color = _white}) =>
-    GoogleFonts.bebasNeue(fontSize: size, color: color, letterSpacing: 1.5);
-TextStyle _body(double size, {Color color = _white}) =>
-    GoogleFonts.nunito(fontSize: size, color: color);
+const _lime  = Color(0xFFCDFC49);
+const _black = Color(0xFF111111);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen
@@ -37,6 +25,8 @@ class _CustomerReturnSuccessScreenState
     extends State<CustomerReturnSuccessScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _lottieCtrl;
+
+  NikeColors get _c => context.nc;
 
   @override
   void initState() {
@@ -58,8 +48,9 @@ class _CustomerReturnSuccessScreenState
 
   @override
   Widget build(BuildContext context) {
+    final c = _c;
     return Scaffold(
-      backgroundColor: _black,
+      backgroundColor: c.bg,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -69,13 +60,13 @@ class _CustomerReturnSuccessScreenState
               const Spacer(),
               _buildCheckmark(),
               const SizedBox(height: 40),
-              _buildHeading(),
+              _buildHeading(c),
               const SizedBox(height: 12),
               _buildCoinRow(),
               const SizedBox(height: 10),
-              _buildSubtext(),
+              _buildSubtext(c),
               const Spacer(),
-              _buildDivider(),
+              _buildDivider(c),
               const SizedBox(height: 24),
               _buildBackHomeButton(context),
               const SizedBox(height: 36),
@@ -85,8 +76,6 @@ class _CustomerReturnSuccessScreenState
       ),
     );
   }
-
-  // ── Lottie Nike swoosh animation ─────────────────────────────────────────
 
   Widget _buildCheckmark() {
     return Lottie.asset(
@@ -104,13 +93,12 @@ class _CustomerReturnSuccessScreenState
     );
   }
 
-  // ── Content ───────────────────────────────────────────────────────────────
-
-  Widget _buildHeading() {
+  Widget _buildHeading(NikeColors c) {
     return Column(
       children: [
         Text('LOOP CLOSED.',
-            style: _heading(42),
+            style: GoogleFonts.bebasNeue(
+                fontSize: 42, color: c.text, letterSpacing: 1.5),
             textAlign: TextAlign.center)
             .animate()
             .fadeIn(delay: 750.ms, duration: 450.ms)
@@ -122,11 +110,7 @@ class _CustomerReturnSuccessScreenState
               curve: Curves.easeOutCubic,
             ),
         const SizedBox(height: 6),
-        Container(
-          width: 40,
-          height: 2,
-          color: _lime,
-        )
+        Container(width: 40, height: 2, color: _lime)
             .animate()
             .scaleX(
               begin: 0,
@@ -147,7 +131,9 @@ class _CustomerReturnSuccessScreenState
         const SizedBox(width: 8),
         Text(
           '+${widget.rwdAmt} NikeCoins',
-          style: _body(18, color: _lime).copyWith(fontWeight: FontWeight.w800),
+          style: GoogleFonts.nunito(
+              fontSize: 18, color: _lime,
+              fontWeight: FontWeight.w800),
         ),
       ],
     )
@@ -162,10 +148,10 @@ class _CustomerReturnSuccessScreenState
         );
   }
 
-  Widget _buildSubtext() {
+  Widget _buildSubtext(NikeColors c) {
     return Text(
       'Your shoe is officially back in the game.',
-      style: _body(15, color: _grey),
+      style: GoogleFonts.nunito(fontSize: 15, color: c.sub),
       textAlign: TextAlign.center,
     )
         .animate()
@@ -179,8 +165,8 @@ class _CustomerReturnSuccessScreenState
         );
   }
 
-  Widget _buildDivider() {
-    return Container(height: 1, color: _border)
+  Widget _buildDivider(NikeColors c) {
+    return Container(height: 1, color: c.border)
         .animate()
         .scaleX(
           begin: 0,
@@ -205,8 +191,9 @@ class _CustomerReturnSuccessScreenState
           elevation: 0,
         ),
         child: Text('Back Home.',
-            style: _body(17, color: _black)
-                .copyWith(fontWeight: FontWeight.w900)),
+            style: GoogleFonts.nunito(
+                fontSize: 17, color: _black,
+                fontWeight: FontWeight.w900)),
       ),
     )
         .animate()
@@ -220,4 +207,3 @@ class _CustomerReturnSuccessScreenState
         );
   }
 }
-

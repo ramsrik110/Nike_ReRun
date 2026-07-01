@@ -3,15 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../nike_colors.dart';
 import 'customer_locker_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Colours
+// Static consts (never themed — always lime or text-on-lime)
 // ─────────────────────────────────────────────────────────────────────────────
-const _black = Color(0xFF111111);
 const _lime  = Color(0xFFCDFC49);
-const _white = Color(0xFFFFFFFF);
-const _grey  = Color(0xFF888888);
+const _black = Color(0xFF111111);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen
@@ -29,9 +28,11 @@ class CustomerLandingScreen extends StatefulWidget {
 
 class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
   int    _count     = 0;
-  int    _prevCount = 0; // animate FROM here, not from 0
+  int    _prevCount = 0;
   bool   _loaded    = false;
   Timer? _ticker;
+
+  NikeColors get _c => context.nc;
 
   @override
   void initState() {
@@ -49,19 +50,30 @@ class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
 
   Future<void> _fetchCount() async {
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection('Shoes') // capital S — always
-          .where('LCS-STS', isEqualTo: 'RETURN INITIATED.')
-          .get();
+      final results = await Future.wait([
+        FirebaseFirestore.instance
+            .collection('dashboard')
+            .doc('DASHBOARD-GLOBAL')
+            .get(),
+        FirebaseFirestore.instance
+            .collection('Shoes')
+            .where('LCS-STS', isEqualTo: 'RETURN INITIATED.')
+            .get(),
+      ]);
+
+      final dashDoc   = results[0] as DocumentSnapshot;
+      final shoesSnap = results[1] as QuerySnapshot;
+
+      final base = (dashDoc.data() as Map<String, dynamic>?)?['OPS-TSP'] as int? ?? 48392;
+      final live = shoesSnap.docs.length;
 
       if (mounted) {
         setState(() {
-          _prevCount = 0;
-          _count     = snap.docs.length;
+          _prevCount = base;
+          _count     = base + live;
           _loaded    = true;
         });
 
-        // Tick up by 1 every 4 seconds — animate only the +1 step
         _ticker = Timer.periodic(const Duration(seconds: 4), (_) {
           if (mounted) {
             setState(() {
@@ -72,10 +84,11 @@ class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
         });
       }
     } catch (_) {
+      const fallbackBase = 48392;
       if (mounted) {
         setState(() {
-          _prevCount = 0;
-          _count     = 48392;
+          _prevCount = fallbackBase;
+          _count     = fallbackBase;
           _loaded    = true;
         });
         _ticker = Timer.periodic(const Duration(seconds: 4), (_) {
@@ -110,8 +123,9 @@ class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = _c;
     return Scaffold(
-      backgroundColor: _black,
+      backgroundColor: c.bg,
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -140,15 +154,15 @@ class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 28),
-                  _buildLogo(),
+                  _buildLogo(c),
                   const Spacer(flex: 2),
-                  _buildHeroText(),
+                  _buildHeroText(c),
                   const SizedBox(height: 36),
-                  _buildCounter(),
+                  _buildCounter(c),
                   const Spacer(flex: 3),
                   _buildEnterButton(),
                   const SizedBox(height: 8),
-                  _buildSubtext(),
+                  _buildSubtext(c),
                 ],
               ),
             ),
@@ -160,7 +174,7 @@ class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
 
   // ── Logo ──────────────────────────────────────────────────────────────────
 
-  Widget _buildLogo() {
+  Widget _buildLogo(NikeColors c) {
     return Row(
       children: [
         ColorFiltered(
@@ -172,7 +186,7 @@ class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
           'RERUN',
           style: GoogleFonts.bebasNeue(
             fontSize: 22,
-            color: _white,
+            color: c.text,
             letterSpacing: 2,
           ),
         ),
@@ -182,7 +196,7 @@ class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
 
   // ── Hero headline ─────────────────────────────────────────────────────────
 
-  Widget _buildHeroText() {
+  Widget _buildHeroText(NikeColors c) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -190,7 +204,7 @@ class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
           'THE LOOP',
           style: GoogleFonts.bebasNeue(
             fontSize: 86,
-            color: _white,
+            color: c.text,
             letterSpacing: 2,
             height: 0.88,
           ),
@@ -238,13 +252,12 @@ class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
 
   // ── Live counter ──────────────────────────────────────────────────────────
 
-  Widget _buildCounter() {
+  Widget _buildCounter(NikeColors c) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _loaded
             ? TweenAnimationBuilder<int>(
-                // key changes only when count changes — animates _prevCount → _count
                 key: ValueKey(_count),
                 tween: IntTween(begin: _prevCount, end: _count),
                 duration: const Duration(milliseconds: 800),
@@ -275,7 +288,7 @@ class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
               'shoes returned worldwide',
               style: GoogleFonts.nunito(
                 fontSize: 14,
-                color: _grey,
+                color: c.sub,
                 letterSpacing: 0.5,
               ),
             ),
@@ -310,7 +323,7 @@ class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
           '≈ 15 / min globally',
           style: GoogleFonts.nunito(
             fontSize: 12,
-            color: _grey.withOpacity(0.6),
+            color: c.sub.withOpacity(0.6),
             letterSpacing: 0.3,
           ),
         ),
@@ -359,11 +372,11 @@ class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
         .slideY(begin: 0.2, end: 0, delay: 750.ms, duration: 500.ms);
   }
 
-  Widget _buildSubtext() {
+  Widget _buildSubtext(NikeColors c) {
     return Center(
       child: Text(
         'Your kicks. Your impact. Your loop.',
-        style: GoogleFonts.nunito(fontSize: 13, color: _grey),
+        style: GoogleFonts.nunito(fontSize: 13, color: c.sub),
       ),
     )
         .animate()

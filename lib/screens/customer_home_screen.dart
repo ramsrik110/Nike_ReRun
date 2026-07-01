@@ -3,26 +3,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../nike_colors.dart';
 import '../models/shoe_model.dart';
 import 'customer_shoe_detail_screen.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Colours
-// ─────────────────────────────────────────────────────────────────────────────
-const _black  = Color(0xFF111111);
-const _card   = Color(0xFF1A1A1A);
-const _lime   = Color(0xFFCDFC49);
-const _white  = Color(0xFFFFFFFF);
-const _grey   = Color(0xFF888888);
-const _border = Color(0xFF2A2A2A);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Font helpers
-// ─────────────────────────────────────────────────────────────────────────────
-TextStyle _heading(double size, {Color color = _white}) =>
-    GoogleFonts.bebasNeue(fontSize: size, color: color, letterSpacing: 1.5);
-TextStyle _body(double size, {Color color = _white}) =>
-    GoogleFonts.nunito(fontSize: size, color: color);
+const _lime  = Color(0xFFCDFC49);
+const _black = Color(0xFF111111);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen
@@ -42,6 +28,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   bool            _loading = true;
   String          _name    = '';
 
+  NikeColors get _c => context.nc;
+
   @override
   void initState() {
     super.initState();
@@ -52,7 +40,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    // Get customer document
     final userDoc = await FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
@@ -65,13 +52,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     final seen = <String>{};
     final shoes = <ShoeModel>[];
 
-    // Primary: fetch each shoe by SUID from the SUID-LNK array on the user doc
     final linkedIds = data?['SUID-LNK'] as List<dynamic>? ?? [];
     for (final id in linkedIds) {
       final suid = id as String;
       if (seen.contains(suid)) continue;
       final doc = await FirebaseFirestore.instance
-          .collection('Shoes') // capital S — always
+          .collection('Shoes')
           .doc(suid)
           .get();
       if (doc.exists) {
@@ -80,9 +66,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       }
     }
 
-    // Secondary fallback: query Shoes where CUID-LNK == current user UID
     final byLinkSnap = await FirebaseFirestore.instance
-        .collection('Shoes') // capital S — always
+        .collection('Shoes')
         .where('CUID-LNK', isEqualTo: user.uid)
         .get();
     for (final d in byLinkSnap.docs) {
@@ -109,22 +94,23 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = _c;
     return Scaffold(
-      backgroundColor: _black,
+      backgroundColor: c.bg,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeader(),
+            _buildHeader(c),
             Expanded(
               child: _loading
                   ? const Center(
                       child: CircularProgressIndicator(color: _lime))
                   : RefreshIndicator(
                       color: _lime,
-                      backgroundColor: _card,
+                      backgroundColor: c.card,
                       onRefresh: _load,
-                      child: _buildBody(),
+                      child: _buildBody(c),
                     ),
             ),
           ],
@@ -133,10 +119,10 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(NikeColors c) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      color: _card,
+      color: c.card,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -147,11 +133,13 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                 child: Image.asset('assets/images/nikererun.png', height: 28),
               ),
               const SizedBox(width: 10),
-              Text('RERUN', style: _heading(22, color: _white)),
+              Text('RERUN',
+                  style: GoogleFonts.bebasNeue(
+                      fontSize: 22, color: c.text, letterSpacing: 1.5)),
             ],
           ),
           IconButton(
-            icon: const Icon(Icons.logout, color: _grey, size: 20),
+            icon: Icon(Icons.logout, color: c.sub, size: 20),
             onPressed: _signOut,
             tooltip: 'Sign Out',
           ),
@@ -160,7 +148,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(NikeColors c) {
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
@@ -168,35 +156,40 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 8),
-          _buildWelcome(),
+          _buildWelcome(c),
           const SizedBox(height: 28),
-          _shoes.isEmpty ? _buildEmptyState() : _buildShoeList(),
+          _shoes.isEmpty ? _buildEmptyState(c) : _buildShoeList(c),
         ],
       ),
     );
   }
 
-  Widget _buildWelcome() {
+  Widget _buildWelcome(NikeColors c) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Hey $_name,', style: _heading(44, color: _lime))
+        Text('Hey $_name,',
+            style: GoogleFonts.bebasNeue(
+                fontSize: 44, color: _lime, letterSpacing: 1.5))
             .animate()
             .fadeIn(duration: 400.ms)
             .slideY(begin: 0.2, end: 0, duration: 400.ms),
         const SizedBox(height: 4),
-        Text('Your kicks. Your story.', style: _body(15, color: _grey))
+        Text('Your kicks. Your story.',
+            style: GoogleFonts.nunito(fontSize: 15, color: c.sub))
             .animate()
             .fadeIn(delay: 150.ms, duration: 400.ms),
       ],
     );
   }
 
-  Widget _buildShoeList() {
+  Widget _buildShoeList(NikeColors c) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Your Kicks', style: _heading(28))
+        Text('Your Kicks',
+            style: GoogleFonts.bebasNeue(
+                fontSize: 28, color: c.text, letterSpacing: 1.5))
             .animate()
             .fadeIn(delay: 200.ms, duration: 400.ms),
         const SizedBox(height: 14),
@@ -206,19 +199,16 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
             scrollDirection: Axis.horizontal,
             itemCount: _shoes.length,
             separatorBuilder: (_, __) => const SizedBox(width: 14),
-            itemBuilder: (context, i) {
-              return _buildShoeCard(_shoes[i], i);
-            },
+            itemBuilder: (context, i) => _buildShoeCard(_shoes[i], i, c),
           ),
         ),
         const SizedBox(height: 28),
-        _buildQuickStats(),
+        _buildQuickStats(c),
       ],
     );
   }
 
-  // FIX 7: Shoe cards slide in from right with 100ms stagger
-  Widget _buildShoeCard(ShoeModel shoe, int index) {
+  Widget _buildShoeCard(ShoeModel shoe, int index, NikeColors c) {
     return GestureDetector(
       onTap: () => Navigator.push(
         context,
@@ -237,14 +227,13 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       ),
       child: Container(
         width: 160,
-        decoration: const BoxDecoration(
-          color: _card,
-          borderRadius: BorderRadius.all(Radius.circular(14)),
+        decoration: BoxDecoration(
+          color: c.card,
+          borderRadius: const BorderRadius.all(Radius.circular(14)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Shoe image
             ClipRRect(
               borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(16)),
@@ -256,13 +245,13 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                         shoe.snmImg,
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => Container(
-                          color: _black,
+                          color: c.bg,
                           child: const Icon(Icons.directions_run,
                               color: _lime, size: 40),
                         ),
                       )
                     : Container(
-                        color: _black,
+                        color: c.bg,
                         child: Center(
                           child: Text(
                             'NIKE',
@@ -285,14 +274,15 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                     shoe.snmHdl,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: _heading(16, color: _lime),
+                    style: GoogleFonts.bebasNeue(
+                        fontSize: 16, color: _lime, letterSpacing: 1.5),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     shoe.snm,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: _body(13, color: _grey),
+                    style: GoogleFonts.nunito(fontSize: 13, color: c.sub),
                   ),
                 ],
               ),
@@ -315,21 +305,20 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(NikeColors c) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 60),
         child: Column(
           children: [
-            const Icon(Icons.directions_run_outlined,
-                color: _grey, size: 64),
+            Icon(Icons.directions_run_outlined, color: c.sub, size: 64),
             const SizedBox(height: 16),
             Text('No kicks registered yet.',
-                style: _body(16, color: _white)),
+                style: GoogleFonts.nunito(fontSize: 16, color: c.text)),
             const SizedBox(height: 8),
             Text(
               'Scan your shoe to get started.',
-              style: _body(14, color: _grey),
+              style: GoogleFonts.nunito(fontSize: 14, color: c.sub),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -345,8 +334,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                 elevation: 0,
               ),
               child: Text('Scan My Shoe',
-                  style: _body(15, color: _black)
-                      .copyWith(fontWeight: FontWeight.w900)),
+                  style: GoogleFonts.nunito(
+                      fontSize: 15, color: _black,
+                      fontWeight: FontWeight.w900)),
             ),
           ],
         ),
@@ -354,27 +344,27 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     ).animate().fadeIn(delay: 200.ms, duration: 400.ms);
   }
 
-  Widget _buildQuickStats() {
+  Widget _buildQuickStats(NikeColors c) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _card,
+        color: c.card,
         borderRadius: BorderRadius.circular(14),
-        border: const Border(left: BorderSide(color: _lime, width: 3)),
+        border: Border(left: BorderSide(color: _lime, width: 3)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _stat('${_shoes.length}', 'Kicks'),
-          _statDivider(),
+          _stat('${_shoes.length}', 'Kicks', c),
+          _statDivider(c),
           _stat(
             '${_shoes.fold<double>(0, (sum, s) => sum + s.ecoCo2).toStringAsFixed(1)} kg',
-            'CO₂ Saved',
+            'CO₂ Saved', c,
           ),
-          _statDivider(),
+          _statDivider(c),
           _stat(
             '${_shoes.fold<int>(0, (sum, s) => sum + s.rwdAmt)}',
-            'NikeCoins',
+            'NikeCoins', c,
           ),
         ],
       ),
@@ -384,17 +374,20 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         .slideY(begin: 0.1, end: 0, duration: 400.ms);
   }
 
-  Widget _stat(String value, String label) {
+  Widget _stat(String value, String label, NikeColors c) {
     return Column(
       children: [
-        Text(value, style: _heading(22, color: _lime)),
+        Text(value,
+            style: GoogleFonts.bebasNeue(
+                fontSize: 22, color: _lime, letterSpacing: 1.5)),
         const SizedBox(height: 2),
-        Text(label, style: _body(12, color: _grey)),
+        Text(label,
+            style: GoogleFonts.nunito(fontSize: 12, color: c.sub)),
       ],
     );
   }
 
-  Widget _statDivider() {
-    return Container(width: 1, height: 36, color: _border);
+  Widget _statDivider(NikeColors c) {
+    return Container(width: 1, height: 36, color: c.border);
   }
 }

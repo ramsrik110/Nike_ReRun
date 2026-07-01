@@ -3,25 +3,52 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../nike_colors.dart';
 import 'login_screen.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Colours
-// ─────────────────────────────────────────────────────────────────────────────
-const _black  = Color(0xFF111111);
-const _card   = Color(0xFF1A1A1A);
-const _lime   = Color(0xFFCDFC49);
-const _white  = Color(0xFFFFFFFF);
-const _grey   = Color(0xFF888888);
-const _border = Color(0xFF2A2A2A);
+const _lime  = Color(0xFFCDFC49);
+const _black = Color(0xFF111111);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Font helpers
+// Background painter — dot grid with lime glow (bottom-left origin)
 // ─────────────────────────────────────────────────────────────────────────────
-TextStyle _heading(double size, {Color color = _white}) =>
-    GoogleFonts.bebasNeue(fontSize: size, color: color, letterSpacing: 1.5);
-TextStyle _body(double size, {Color color = _white}) =>
-    GoogleFonts.nunito(fontSize: size, color: color);
+
+class _DotGridPainter extends CustomPainter {
+  const _DotGridPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const step = 22.0;
+    final dotPaint = Paint()..style = PaintingStyle.fill;
+
+    final glowOrigin = Offset(0, size.height);
+    final maxDist = size.height * 1.1;
+
+    for (double x = step; x < size.width; x += step) {
+      for (double y = step; y < size.height; y += step) {
+        final dist = (Offset(x, y) - glowOrigin).distance;
+        final boost = (1 - (dist / maxDist)).clamp(0.0, 1.0);
+        final alpha = 0.07 + boost * 0.14;
+        dotPaint.color = _lime.withOpacity(alpha);
+        canvas.drawCircle(Offset(x, y), 1.2, dotPaint);
+      }
+    }
+
+    final glowPaint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          _lime.withOpacity(0.12),
+          _lime.withOpacity(0.04),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.45, 1.0],
+      ).createShader(Rect.fromCircle(center: glowOrigin, radius: size.height * 0.85));
+    canvas.drawRect(Offset.zero & size, glowPaint);
+  }
+
+  @override
+  bool shouldRepaint(_DotGridPainter old) => false;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen
@@ -46,6 +73,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscureConf  = true;
   String? _errorMsg;
 
+  NikeColors get _c => context.nc;
+
   @override
   void dispose() {
     _nameCtrl.dispose();
@@ -66,27 +95,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() { _loading = true; _errorMsg = null; });
 
     try {
-      // ── Step 1: Create Firebase Auth account ──────────────────────────────
       final credential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
         email:    _emailCtrl.text.trim(),
         password: _passCtrl.text.trim(),
       );
 
-      // ── Step 2: Set display name (non-critical, don't block on failure) ───
       try {
         await credential.user?.updateDisplayName(_nameCtrl.text.trim());
-      } catch (_) {
-        // display name update is optional — continue even if it fails
-      }
+      } catch (_) {}
 
-      // ── Step 3: Write to Firestore users collection ───────────────────────
-      // Collection name is 'users' (lowercase u)
-      // Document ID is the Firebase Auth UID
       try {
         await FirebaseFirestore.instance
-            .collection('users')           // lowercase u — correct
-            .doc(credential.user!.uid)     // Firebase Auth UID as document ID
+            .collection('users')
+            .doc(credential.user!.uid)
             .set({
           'uid':       credential.user!.uid,
           'name':      _nameCtrl.text.trim(),
@@ -98,7 +120,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
           'LCS-RTN':   [],
         });
       } on FirebaseException catch (e) {
-        // Firestore write failed — show the real error but Auth account was created
         setState(() {
           _loading  = false;
           _errorMsg = 'Account created but profile save failed.\n'
@@ -107,18 +128,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
         return;
       }
 
-      if (mounted) {
-        _showSuccessAndNavigate();
-      }
+      if (mounted) _showSuccessAndNavigate();
 
     } on FirebaseAuthException catch (e) {
-      // Show the REAL Firebase error code so we can diagnose it
       setState(() {
         _loading  = false;
         _errorMsg = _friendlyError(e.code, e.message);
       });
     } catch (e) {
-      // Catch any other unexpected error (network, etc.)
       setState(() {
         _loading  = false;
         _errorMsg = 'Unexpected error: ${e.toString()}';
@@ -127,11 +144,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _showSuccessAndNavigate() {
+    final c = _c;
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => Dialog(
-        backgroundColor: _card,
+        backgroundColor: c.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.all(28),
@@ -152,11 +170,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     curve: Curves.elasticOut,
                   ),
               const SizedBox(height: 16),
-              Text('Your account is ready.', style: _heading(24)),
+              Text('Your account is ready.',
+                  style: GoogleFonts.bebasNeue(
+                      fontSize: 24, color: c.text, letterSpacing: 1.5)),
               const SizedBox(height: 8),
               Text(
                 "Let us get you in.",
-                style: _body(14, color: _grey),
+                style: GoogleFonts.nunito(fontSize: 14, color: c.sub),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
@@ -177,7 +197,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: Text('Sign In', style: _body(16, color: _black)),
+                  child: Text('Sign In',
+                      style: GoogleFonts.nunito(
+                          fontSize: 16, color: _black)),
                 ),
               ),
             ],
@@ -196,8 +218,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       case 'invalid-email':
         return 'That email address looks wrong. Check it and try again.';
       case 'operation-not-allowed':
-        // This fires when Email/Password sign-in is disabled in Firebase Console.
-        // Fix: Firebase Console → Authentication → Sign-in method → Enable Email/Password
         return 'Email sign-in is not enabled yet.\n'
             'ACTION NEEDED: Go to Firebase Console → Authentication → '
             'Sign-in method → Email/Password → Enable it.\n'
@@ -213,7 +233,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         return 'This app is not authorised to use Firebase Auth.\n'
             '[Error code: $code]';
       default:
-        // Always show the real code for unknown errors so we can diagnose
         return 'Firebase error [$code]: ${message ?? "Unknown error. Check Firebase Console."}';
     }
   }
@@ -222,86 +241,100 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = _c;
     return Scaffold(
-      backgroundColor: _black,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 40),
-                _buildLogo(),
-                const SizedBox(height: 32),
-                Text('WELCOME TO\nTHE LOOP.', style: _heading(36))
-                    .animate()
-                    .fadeIn(duration: 400.ms)
-                    .slideY(begin: 0.2, end: 0, duration: 400.ms),
-                const SizedBox(height: 8),
-                Text('Create your Nike ReRun account.',
-                        style: _body(15, color: _grey))
-                    .animate()
-                    .fadeIn(delay: 100.ms, duration: 400.ms),
-                const SizedBox(height: 32),
-                if (_errorMsg != null) _buildError(),
-                _buildField(
-                  controller: _nameCtrl,
-                  label: 'Full Name',
-                  icon: Icons.person_outline,
-                  delay: 150,
-                  validator: (v) =>
-                      v == null || v.isEmpty ? 'Enter your name.' : null,
+      backgroundColor: c.bg,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: CustomPaint(painter: const _DotGridPainter()),
+          ),
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 40),
+                    _buildLogo(c),
+                    const SizedBox(height: 32),
+                    Text('WELCOME TO\nTHE LOOP.',
+                        style: GoogleFonts.bebasNeue(
+                            fontSize: 36, color: c.text, letterSpacing: 1.5))
+                        .animate()
+                        .fadeIn(duration: 400.ms)
+                        .slideY(begin: 0.2, end: 0, duration: 400.ms),
+                    const SizedBox(height: 8),
+                    Text('Create your Nike ReRun account.',
+                        style: GoogleFonts.nunito(fontSize: 15, color: c.sub))
+                        .animate()
+                        .fadeIn(delay: 100.ms, duration: 400.ms),
+                    const SizedBox(height: 32),
+                    if (_errorMsg != null) _buildError(c),
+                    _buildField(
+                      c: c,
+                      controller: _nameCtrl,
+                      label: 'Full Name',
+                      icon: Icons.person_outline,
+                      delay: 150,
+                      validator: (v) =>
+                          v == null || v.isEmpty ? 'Enter your name.' : null,
+                    ),
+                    const SizedBox(height: 14),
+                    _buildField(
+                      c: c,
+                      controller: _emailCtrl,
+                      label: 'Email Address',
+                      icon: Icons.email_outlined,
+                      delay: 200,
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (v) =>
+                          v == null || !v.contains('@') ? 'Enter a valid email.' : null,
+                    ),
+                    const SizedBox(height: 14),
+                    _buildField(
+                      c: c,
+                      controller: _passCtrl,
+                      label: 'Password',
+                      icon: Icons.lock_outline,
+                      delay: 250,
+                      obscure: _obscurePass,
+                      toggleObscure: () =>
+                          setState(() => _obscurePass = !_obscurePass),
+                      validator: (v) =>
+                          v == null || v.length < 6 ? 'Min 6 characters.' : null,
+                    ),
+                    const SizedBox(height: 14),
+                    _buildField(
+                      c: c,
+                      controller: _confirmPassCtrl,
+                      label: 'Confirm Password',
+                      icon: Icons.lock_outline,
+                      delay: 300,
+                      obscure: _obscureConf,
+                      toggleObscure: () =>
+                          setState(() => _obscureConf = !_obscureConf),
+                      validator: (v) =>
+                          v == null || v.isEmpty ? 'Confirm your password.' : null,
+                    ),
+                    const SizedBox(height: 28),
+                    _buildRegisterButton(),
+                    const SizedBox(height: 20),
+                    _buildSignInLink(c),
+                    const SizedBox(height: 40),
+                  ],
                 ),
-                const SizedBox(height: 14),
-                _buildField(
-                  controller: _emailCtrl,
-                  label: 'Email Address',
-                  icon: Icons.email_outlined,
-                  delay: 200,
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (v) =>
-                      v == null || !v.contains('@') ? 'Enter a valid email.' : null,
-                ),
-                const SizedBox(height: 14),
-                _buildField(
-                  controller: _passCtrl,
-                  label: 'Password',
-                  icon: Icons.lock_outline,
-                  delay: 250,
-                  obscure: _obscurePass,
-                  toggleObscure: () =>
-                      setState(() => _obscurePass = !_obscurePass),
-                  validator: (v) =>
-                      v == null || v.length < 6 ? 'Min 6 characters.' : null,
-                ),
-                const SizedBox(height: 14),
-                _buildField(
-                  controller: _confirmPassCtrl,
-                  label: 'Confirm Password',
-                  icon: Icons.lock_outline,
-                  delay: 300,
-                  obscure: _obscureConf,
-                  toggleObscure: () =>
-                      setState(() => _obscureConf = !_obscureConf),
-                  validator: (v) =>
-                      v == null || v.isEmpty ? 'Confirm your password.' : null,
-                ),
-                const SizedBox(height: 28),
-                _buildRegisterButton(),
-                const SizedBox(height: 20),
-                _buildSignInLink(),
-                const SizedBox(height: 40),
-              ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildLogo() {
+  Widget _buildLogo(NikeColors c) {
     return Row(
       children: [
         ColorFiltered(
@@ -309,14 +342,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: Image.asset('assets/images/nikererun.png', height: 30),
         ).animate().fadeIn(duration: 500.ms),
         const SizedBox(width: 10),
-        Text('RERUN', style: _heading(26, color: _white))
+        Text('RERUN',
+            style: GoogleFonts.bebasNeue(
+                fontSize: 26, color: c.text, letterSpacing: 1.5))
             .animate()
             .fadeIn(duration: 500.ms),
       ],
     );
   }
 
-  Widget _buildError() {
+  Widget _buildError(NikeColors c) {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 16),
@@ -331,24 +366,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.error_outline,
-                  color: Colors.redAccent, size: 16),
+              const Icon(Icons.error_outline, color: Colors.redAccent, size: 16),
               const SizedBox(width: 6),
               Text('Registration Failed',
-                  style: _body(14, color: Colors.redAccent)
-                      .copyWith(fontWeight: FontWeight.w700)),
+                  style: GoogleFonts.nunito(
+                      fontSize: 14, color: Colors.redAccent,
+                      fontWeight: FontWeight.w700)),
             ],
           ),
           const SizedBox(height: 6),
-          // Shows the real Firebase error so we can diagnose it
           Text(_errorMsg!,
-              style: _body(13, color: Colors.redAccent.withOpacity(0.9))),
+              style: GoogleFonts.nunito(
+                  fontSize: 13,
+                  color: Colors.redAccent.withOpacity(0.9))),
         ],
       ),
     );
   }
 
   Widget _buildField({
+    required NikeColors c,
     required TextEditingController controller,
     required String label,
     required IconData icon,
@@ -362,30 +399,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
       controller:   controller,
       obscureText:  obscure,
       keyboardType: keyboardType,
-      style: _body(16),
+      style: GoogleFonts.nunito(fontSize: 16, color: c.text),
       validator: validator,
       decoration: InputDecoration(
         labelText:     label,
-        labelStyle:    _body(15, color: _grey),
-        prefixIcon:    Icon(icon, color: _grey, size: 20),
+        labelStyle:    GoogleFonts.nunito(fontSize: 15, color: c.sub),
+        prefixIcon:    Icon(icon, color: c.sub, size: 20),
         suffixIcon:    toggleObscure != null
             ? IconButton(
                 icon: Icon(
                   obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                  color: _grey, size: 20,
+                  color: c.sub, size: 20,
                 ),
                 onPressed: toggleObscure,
               )
             : null,
         filled:        true,
-        fillColor:     _card,
+        fillColor:     c.card,
         border:        OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide:   const BorderSide(color: _border),
+          borderSide:   BorderSide(color: c.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide:   const BorderSide(color: _border),
+          borderSide:   BorderSide(color: c.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
@@ -424,8 +461,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 width: 20,
                 child: CircularProgressIndicator(color: _black, strokeWidth: 2),
               )
-            : Text('Join The Loop.', style: _body(17, color: _black)
-                .copyWith(fontWeight: FontWeight.w800)),
+            : Text('Join The Loop.',
+                style: GoogleFonts.nunito(
+                    fontSize: 17, color: _black,
+                    fontWeight: FontWeight.w800)),
       ),
     )
         .animate()
@@ -433,7 +472,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         .slideY(begin: 0.1, end: 0, duration: 400.ms);
   }
 
-  Widget _buildSignInLink() {
+  Widget _buildSignInLink(NikeColors c) {
     return Center(
       child: GestureDetector(
         onTap: () => Navigator.of(context).pushReplacement(
@@ -441,13 +480,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         child: RichText(
           text: TextSpan(
-            style: _body(15, color: _grey),
+            style: GoogleFonts.nunito(fontSize: 15, color: c.sub),
             children: [
               const TextSpan(text: 'Already in the loop? '),
               TextSpan(
                 text: 'Sign In',
-                style: _body(15, color: _lime)
-                    .copyWith(fontWeight: FontWeight.w700),
+                style: GoogleFonts.nunito(
+                    fontSize: 15, color: _lime,
+                    fontWeight: FontWeight.w700),
               ),
             ],
           ),

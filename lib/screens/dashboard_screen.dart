@@ -3,28 +3,23 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'dart:math' as math;
+import '../nike_colors.dart';
+import '../theme_notifier.dart';
 import 'login_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Colours
+// Constants that never change with theme
 // ─────────────────────────────────────────────────────────────────────────────
-const _black  = Color(0xFF111111);
-const _card   = Color(0xFF1A1A1A);
-const _lime   = Color(0xFFCDFC49);
-const _white  = Color(0xFFFFFFFF);
-const _grey   = Color(0xFF888888);
-const _border = Color(0xFF2A2A2A);
+const _lime  = NikeColors.lime;
+const _black = NikeColors.black;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Font helpers
-// ─────────────────────────────────────────────────────────────────────────────
-TextStyle _heading(double size, {Color color = _white}) =>
+TextStyle _heading(double size, {Color color = const Color(0xFFFFFFFF)}) =>
     GoogleFonts.bebasNeue(fontSize: size, color: color, letterSpacing: 1.5);
-TextStyle _body(double size, {Color color = _white}) =>
+TextStyle _body(double size, {Color color = const Color(0xFFFFFFFF)}) =>
     GoogleFonts.nunito(fontSize: size, color: color);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FIX 4: Local data map — three regional datasets
+// Regional data
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _RegionData {
@@ -83,6 +78,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final _filters = ['GLOBAL', 'EUROPE', 'NORTH AMERICA'];
 
   _RegionData get _data => _regionDataMap[_activeFilter]!;
+  NikeColors  get _c    => context.nc;
 
   void _signOut() async {
     await FirebaseAuth.instance.signOut();
@@ -97,10 +93,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _black,
+      backgroundColor: _c.bg,
       body: Column(
         children: [
-          // French Lime accent line
           Container(height: 2, color: _lime),
           Expanded(
             child: SafeArea(
@@ -114,7 +109,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(height: 20),
                     _buildFilters(),
                     const SizedBox(height: 24),
-                    // FIX 4 + FIX 7: re-keyed on filter change → restarts all animations
                     _buildMetricGrid(),
                     const SizedBox(height: 24),
                     _buildChart(),
@@ -147,11 +141,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Image.asset('assets/images/nikererun.png', height: 26),
                 ),
                 const SizedBox(width: 8),
-                Text('RERUN', style: _heading(24, color: _white)),
+                Text('RERUN', style: _heading(24, color: _c.text)),
               ],
             ).animate().fadeIn(duration: 400.ms),
             const SizedBox(height: 4),
-            Text('Dashboard', style: _heading(38))
+            Text('Dashboard', style: _heading(38, color: _c.text))
                 .animate()
                 .fadeIn(delay: 100.ms, duration: 400.ms),
           ],
@@ -161,13 +155,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text('Last updated', style: _body(11, color: _grey)),
-                Text('21/05/2026', style: _body(12)),
+                Text('Last updated', style: _body(11, color: _c.sub)),
+                Text('21/05/2026', style: _body(12, color: _c.text)),
               ],
             ).animate().fadeIn(delay: 100.ms),
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
             IconButton(
-              icon: const Icon(Icons.logout, color: _grey, size: 20),
+              icon: Icon(Icons.logout, color: _c.sub, size: 20),
               onPressed: _signOut,
             ),
           ],
@@ -176,7 +170,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── FIX 4: Filter pills — instant state update on tap ────────────────────
+  // ── Filter pills ──────────────────────────────────────────────────────────
 
   Widget _buildFilters() {
     return Wrap(
@@ -191,11 +185,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             decoration: BoxDecoration(
               color: active ? _lime : Colors.transparent,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: active ? _lime : _border),
+              border: Border.all(color: active ? _lime : _c.border),
             ),
             child: Text(
               f,
-              style: _body(12, color: active ? _black : _white).copyWith(
+              style: _body(12, color: active ? _black : _c.text).copyWith(
                 fontWeight: active ? FontWeight.w700 : FontWeight.w400,
                 letterSpacing: 0.5,
               ),
@@ -206,7 +200,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ).animate().fadeIn(delay: 150.ms, duration: 400.ms);
   }
 
-  // ── Metric grid — keys change with filter → TweenAnimationBuilder restarts ─
+  // ── Metric grid ───────────────────────────────────────────────────────────
 
   Widget _buildMetricGrid() {
     final d = _data;
@@ -268,28 +262,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── FIX 7: Chart animates left to right 1500ms, restarts on filter change ─
+  // ── Chart ─────────────────────────────────────────────────────────────────
 
   Widget _buildChart() {
-    final points =
-        _data.trend.map((v) => v.toDouble()).toList();
+    final points = _data.trend.map((v) => v.toDouble()).toList();
+    final c = _c;
 
     return Container(
-      decoration: const BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.all(Radius.circular(14)),
-        border: Border(top: BorderSide(color: _lime, width: 2)),
+      decoration: BoxDecoration(
+        color: c.card,
+        borderRadius: const BorderRadius.all(Radius.circular(14)),
+        border: const Border(top: BorderSide(color: _lime, width: 2)),
       ),
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Monthly Carbon Trend', style: _heading(18)),
+          Text('Monthly Carbon Trend', style: _heading(18, color: c.text)),
           const SizedBox(height: 4),
           Text('Tonnes CO₂ diverted per month',
-              style: _body(12, color: _grey)),
+              style: _body(12, color: c.sub)),
           const SizedBox(height: 20),
-          // Key changes with filter → restarts the TweenAnimationBuilder
           TweenAnimationBuilder<double>(
             key: ValueKey('chart_$_activeFilter'),
             tween: Tween(begin: 0, end: 1),
@@ -301,7 +294,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: CustomPaint(
                   size: Size.infinite,
                   painter: _LinechartPainter(
-                      points: points, animationValue: animVal),
+                    points: points,
+                    animationValue: animVal,
+                    lineColor: _lime,
+                    dotBgColor: c.card,
+                    trackColor: c.border,
+                  ),
                 ),
               );
             },
@@ -310,7 +308,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: ['Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May']
-                .map((m) => Text(m, style: _body(11, color: _grey)))
+                .map((m) => Text(m, style: _body(11, color: c.sub)))
                 .toList(),
           ),
         ],
@@ -330,7 +328,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onPressed: () {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              backgroundColor: _card,
+              backgroundColor: _c.card,
               content: Text(
                 'EU Compliance Report generated.',
                 style: _body(13, color: _lime),
@@ -358,8 +356,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FIX 7: Metric card with count-up animation
-// Key changes with filter → TweenAnimationBuilder counts from 0 to new value
+// Metric card with count-up animation
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _MetricCard extends StatelessWidget {
@@ -383,10 +380,11 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.nc;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _card,
+        color: c.card,
         borderRadius: BorderRadius.circular(14),
         border: const Border(left: BorderSide(color: _lime, width: 3)),
       ),
@@ -403,7 +401,6 @@ class _MetricCard extends StatelessWidget {
             child: Icon(icon, color: _lime, size: 18),
           ),
           const SizedBox(height: 12),
-          // FIX 7: count-up from 0 to value over 1500ms
           TweenAnimationBuilder<double>(
             key: ValueKey('${filterKey}_$label'),
             tween: Tween(begin: 0, end: value),
@@ -417,28 +414,27 @@ class _MetricCard extends StatelessWidget {
                 '$displayVal$suffix',
                 style: GoogleFonts.bebasNeue(
                   fontSize: 34,
-                  color: _white,
+                  color: c.text,
                   letterSpacing: 1,
                 ),
               );
             },
           ),
           const SizedBox(height: 4),
-          Text(label, style: GoogleFonts.nunito(color: _white, fontSize: 11)),
+          Text(label, style: GoogleFonts.nunito(color: c.text, fontSize: 11)),
           const SizedBox(height: 4),
           Text(trend, style: GoogleFonts.nunito(color: _lime, fontSize: 11)),
         ],
       ),
     )
         .animate()
-        .fadeIn(
-            delay: Duration(milliseconds: delay), duration: 400.ms)
+        .fadeIn(delay: Duration(milliseconds: delay), duration: 400.ms)
         .slideY(begin: 0.1, end: 0, duration: 400.ms);
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FIX 7: Circular progress card — ring animates 0→% over 2000ms
+// Circular progress card
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _CircularMetricCard extends StatelessWidget {
@@ -456,10 +452,11 @@ class _CircularMetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.nc;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _card,
+        color: c.card,
         borderRadius: BorderRadius.circular(14),
         border: const Border(left: BorderSide(color: _lime, width: 3)),
       ),
@@ -468,7 +465,6 @@ class _CircularMetricCard extends StatelessWidget {
         children: [
           const SizedBox(height: 4),
           Center(
-            // FIX 7: ring draws from 0 to percent over 2000ms
             child: TweenAnimationBuilder<double>(
               key: ValueKey('${filterKey}_ring'),
               tween: Tween(begin: 0, end: percent / 100),
@@ -479,7 +475,10 @@ class _CircularMetricCard extends StatelessWidget {
                   width: 64,
                   height: 64,
                   child: CustomPaint(
-                    painter: _RingPainter(percent: animVal),
+                    painter: _RingPainter(
+                      percent: animVal,
+                      trackColor: c.border,
+                    ),
                     child: Center(
                       child: Text(
                         '${(animVal * 100).round()}%',
@@ -496,7 +495,7 @@ class _CircularMetricCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Text(label, style: GoogleFonts.nunito(color: _white, fontSize: 11)),
+          Text(label, style: GoogleFonts.nunito(color: c.text, fontSize: 11)),
           const SizedBox(height: 4),
           Text('Circular target: 80%',
               style: GoogleFonts.nunito(color: _lime, fontSize: 11)),
@@ -504,8 +503,7 @@ class _CircularMetricCard extends StatelessWidget {
       ),
     )
         .animate()
-        .fadeIn(
-            delay: Duration(milliseconds: delay), duration: 400.ms)
+        .fadeIn(delay: Duration(milliseconds: delay), duration: 400.ms)
         .slideY(begin: 0.1, end: 0, duration: 400.ms);
   }
 }
@@ -516,7 +514,9 @@ class _CircularMetricCard extends StatelessWidget {
 
 class _RingPainter extends CustomPainter {
   final double percent;
-  const _RingPainter({required this.percent});
+  final Color  trackColor;
+
+  const _RingPainter({required this.percent, required this.trackColor});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -527,7 +527,7 @@ class _RingPainter extends CustomPainter {
       centre,
       radius,
       Paint()
-        ..color       = _border
+        ..color       = trackColor
         ..style       = PaintingStyle.stroke
         ..strokeWidth = 5,
     );
@@ -548,20 +548,27 @@ class _RingPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_RingPainter old) => old.percent != percent;
+  bool shouldRepaint(_RingPainter old) =>
+      old.percent != percent || old.trackColor != trackColor;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FIX 7: Line chart painter — draws left to right via animationValue
+// Line chart painter — draws left to right via animationValue
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _LinechartPainter extends CustomPainter {
   final List<double> points;
-  final double       animationValue; // 0.0 → 1.0
+  final double       animationValue;
+  final Color        lineColor;
+  final Color        dotBgColor;
+  final Color        trackColor;
 
   const _LinechartPainter({
     required this.points,
     required this.animationValue,
+    required this.lineColor,
+    required this.dotBgColor,
+    required this.trackColor,
   });
 
   @override
@@ -582,7 +589,6 @@ class _LinechartPainter extends CustomPainter {
 
     final allOffsets = List.generate(points.length, toOffset);
 
-    // How many points to draw based on animation progress
     final visibleCount =
         ((points.length - 1) * animationValue).clamp(0.0, points.length - 1.0);
     final fullPoints = visibleCount.floor();
@@ -590,7 +596,6 @@ class _LinechartPainter extends CustomPainter {
 
     if (fullPoints == 0) return;
 
-    // Interpolated end point
     final List<Offset> offsets = [...allOffsets.take(fullPoints + 1)];
     if (fullPoints < points.length - 1 && frac > 0) {
       final a = allOffsets[fullPoints];
@@ -601,7 +606,6 @@ class _LinechartPainter extends CustomPainter {
       );
     }
 
-    // Fill gradient
     final fillPath = Path()
       ..moveTo(offsets.first.dx, size.height);
     for (final o in offsets) {
@@ -617,11 +621,10 @@ class _LinechartPainter extends CustomPainter {
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [_lime.withOpacity(0.25), _lime.withOpacity(0)],
+          colors: [lineColor.withOpacity(0.25), lineColor.withOpacity(0)],
         ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
     );
 
-    // Line
     final linePath = Path()
       ..moveTo(offsets.first.dx, offsets.first.dy);
     for (int i = 1; i < offsets.length; i++) {
@@ -636,20 +639,19 @@ class _LinechartPainter extends CustomPainter {
     canvas.drawPath(
       linePath,
       Paint()
-        ..color       = _lime
+        ..color       = lineColor
         ..style       = PaintingStyle.stroke
         ..strokeWidth = 2.5
         ..strokeCap   = StrokeCap.round,
     );
 
-    // Dots
     for (final o in offsets) {
-      canvas.drawCircle(o, 4, Paint()..color = _lime);
+      canvas.drawCircle(o, 4, Paint()..color = lineColor);
       canvas.drawCircle(
           o,
           4,
           Paint()
-            ..color       = _black
+            ..color       = dotBgColor
             ..style       = PaintingStyle.stroke
             ..strokeWidth = 2);
     }
@@ -657,5 +659,7 @@ class _LinechartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_LinechartPainter old) =>
-      old.animationValue != animationValue || old.points != points;
+      old.animationValue != animationValue ||
+      old.points != points ||
+      old.dotBgColor != dotBgColor;
 }
