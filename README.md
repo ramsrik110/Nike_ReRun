@@ -1,8 +1,10 @@
 Nike ReRun
-A digital product passport for circular sneakers — tracking every Nike shoe from manufacture to end-of-life, so returns can be sorted, routed, and reported on automatically.
+A digital product passport for circular sneakers
+Tracking every Nike shoe from manufacture to end-of-life — so returns get sorted, routed, and reported on automatically.
 
-Built as a Digital Supply Chain Management pilot project.
+Show Image Show Image Show Image Show Image Show Image Show Image
 
+</div>
 The Problem
 When a Nike shoe is sold, its supply chain data disappears. Years later, when that shoe comes back for recycling, Nike has no record of what it's made of, no way to sort it efficiently, and no way to prove sustainability/EU compliance to regulators. This is the traceability gap.
 
