@@ -5,91 +5,156 @@
 ![Dart](https://img.shields.io/badge/Dart-0175C2?style=for-the-badge&logo=dart&logoColor=white)
 ![Groq](https://img.shields.io/badge/Groq_API-F55036?style=for-the-badge&logo=groq&logoColor=white)
 ![Llama 3](https://img.shields.io/badge/Llama_3.3_70B-0452C8?style=for-the-badge&logo=meta&logoColor=white)
+![Make.com](https://img.shields.io/badge/Make.com-000000?style=for-the-badge&logo=make&logoColor=white)
 
-Tracking every Nike shoe from manufacture to end-of-life — so returns get sorted, routed, and reported on automatically. 
-
----
-
-### 🛑 The Problem: The Traceability Gap
-When a Nike shoe is sold, its supply chain data disappears. Years later, when that shoe comes back for recycling, Nike has no record of what it's made of, no way to sort it efficiently, and no way to prove sustainability/EU compliance to regulators. 
-
-### 💡 The Solution
-**Nike ReRun** gives every shoe a permanent digital identity — from manufacture through return — and uses that data to automatically decide what should happen to it next: refurbish for resale, break down for materials, or recycle. 
+> A modern, AI-powered circular economy application designed to close the fashion supply chain "traceability gap". By equipping every physical sneaker with an immutable Digital Product Passport (DPP), Nike ReRun manages reverse logistics, executes weighted recycling routing, and generates real-time compliance dashboards.
 
 ---
 
-## ✨ Core Experiences & Features
-
-### 👤 1. Customer Experience
-* **Digital Product Passport:** View shoe materials, origin, carbon footprint, and lifecycle timeline.
-* **Circular Returns:** One-tap return flow that rewards users with **NikeCoin**.
-* **Personal Locker:** Manage owned/returned shoes, view profile stats, and collect eco-achievement badges.
-* **NikeBot (AI):** A chat assistant that explains passport data, routing status, and rewards.
-
-### 🏭 2. Hub Inspector (Factory Tool)
-* **Industrial UI:** Monochrome factory-tool theme with an Employee ID + PIN "punch in" flow styled for handheld scanners.
-* **Smart Scanning:** QR/shoe-ID scan instantly pulls up material & condition breakdown.
-* **One-Tap Routing:** Executes instant, data-driven routing decisions based on physical condition.
-* **RouteBot (AI):** A chat assistant that explains the routing matrix and current hub status.
-
-### 🌍 3. Admin / HQ Dashboard
-* **Live Sustainability Metrics:** Track CO₂ saved, total shoes processed, recycling %, and active hubs in real-time.
-* **Dynamic Filtering:** Filter data by Region (Global / Europe / North America) with monthly trend charts.
-* **EU Compliance:** Generate instant PDF reports for regulatory compliance.
-* **DashBot (AI):** A chat assistant that summarizes dashboard metrics on demand.
+## 📌 Table of Contents
+1. [The Traceability Gap](#-the-traceability-gap)
+2. [The Solution & Core Workflows](#-the-solution--core-workflows)
+3. [System Architecture](#%EF%B8%8F-system-architecture)
+4. [The Routing & Recycle Score Algorithm](#-the-routing--recycle-score-algorithm)
+5. [AI Chatbot Infrastructure](#-ai-chatbot-infrastructure)
+6. [Database Schema (Firestore)](#-database-schema-firestore)
+7. [Authentication Entry Points](#-authentication-entry-points)
+8. [The Development Team & Contributions](#-the-development-team--contributions)
+9. [Getting Started](#-getting-started)
 
 ---
 
-## 🔀 The Routing Algorithm Matrix
+## 🛑 The Traceability Gap
+In the current linear retail model, the moment a Nike sneaker is purchased, its supply chain data ceases to exist. Years down the line, when that shoe is returned for recycling, Nike lacks critical item-level insight:
+* **No Material Integrity Records:** No way to instantly know the material composition ratios (leather, flyknit, rubber, foam) of that specific production run.
+* **Inclusion Barriers:** Inefficient sorting procedures that rely on manual inspection, leading to sorting errors.
+* **Compliance Risks:** Difficulty proving verified carbon offsets and circular recycling rates to EU regulatory bodies.
 
-Given a scanned shoe's condition, the app instantly calculates its recycling route. *Material composition percentages (Flyknit / Rubber / Foam / Leather) further refine the sub-stream selection within each route.*
-
-| Sole Condition | Fabric Condition | Routing Decision |
-| :--- | :--- | :--- |
-| **Intact** | **Intact** | 📦 Refurbish for resale |
-| **Damaged** | **Intact** | 🧵 Flyknit textile re-weaving |
-| **Intact** | **Damaged** | 👟 Nike Grind rubber shredding |
-| **Damaged** | **Damaged** | ♻️ Thermoplastic pelletizing |
-
----
-
-## 🤖 AI Assistant Architecture
-Each role gets its own chat persona, wired directly to real Firestore data. Text chat runs on **Groq's Llama 3.3 70B** with voice input via **Whisper large-v3** and text-to-speech via `flutter_tts`.
-
-| Persona | Role | Knowledge Base |
-| :--- | :--- | :--- |
-| **NikeBot** | Customer | This specific shoe's passport, lifecycle status, and NikeCoin rewards. |
-| **RouteBot** | Inspector | The routing matrix, current hub status, and throughput data. |
-| **DashBot** | Admin | Global sustainability metrics and hub network stats. |
+### 💡 The ReRun Solution
+Nike ReRun establishes a continuous, end-to-end data pipeline:
+1. **At Manufacture:** Every physical sneaker is assigned a unique **SUID** linked to an immutable Digital Product Passport in Firebase.
+2. **At Return:** The customer is incentivized to return the shoe via automated **NikeCoin rewards**.
+3. **At the Sorting Hub:** Inspectors scan the shoe to execute a weighted, multi-level routing algorithm.
+4. **At HQ:** Sustainability metrics compile in real-time, allowing administrators to generate certified EU compliance reports in one click.
 
 ---
 
-## 🗄️ Data Model (Firestore)
+## 📱 Core Workflows
 
-| Collection | Purpose | Key Fields |
-| :--- | :--- | :--- |
-| `Shoes` | Digital product passport per physical shoe | `SUID`, material composition, `ECO-CO2`, lifecycle status, routing decision |
-| `users` | Customer & Inspector accounts | Name, email, linked shoes, NikeCoin balance |
-| `hubs` | Recycling hub network | Location, lanes, throughput, routing log |
-| `dashboard` | Aggregated sustainability metrics | Total CO₂, throughput, recycling %, active hub count |
+### 👤 1. Customer Hub
+* **Digital Product Passport:** Access the manufacturing origin, verified carbon footprint ($CO_2$ saved), and a dynamic three-milestone lifecycle timeline.
+* **Circular Return Engine:** Tap to initiate returns, triggering instant wallet credit of **120 NikeCoin rewards** to drive return loops.
+* **Personal Digital Locker:** Manage actively owned and historically recycled shoes alongside gamified eco-achievement badges.
+* **NikeBot AI:** Answer customer inquiries regarding their specific shoe's materials, return eligibility, and rewards.
+
+### 🏭 2. Hub Inspector Terminal
+* **Industrial Grade UI:** Transition into a high-contrast, monochrome, low-light factory-optimized interface tailored for handheld rugged warehouse scanners.
+* **QR Smart Scanner:** Seamlessly integrates physical cameras to pull up active design blueprints, structural condition meters, and material breakdowns.
+* **Algorithmic Routing:** Evaluates physical sole and fabric conditions through an active decision matrix.
+* **RouteBot AI:** Instant helper trained on standard operating procedures, logistics streams, and mechanical throughput benchmarks.
+
+### 📈 3. Admin HQ Dashboard
+* **Macro Sustainability Analytics:** Monitor global or regionalized aggregate metrics including total tonnage of $CO_2$ diverted, active hub counts, and total shoes processed.
+* **Interactive Filters:** Narrow performance trends by Global, European, or North American facilities.
+* **Instant Compliance:** Generate and export official regulatory PDFs proving verified circular recycling statistics.
+* **DashBot AI:** Summarizes complex operational data, regional trends, and logistics patterns on command.
 
 ---
 
-## 🏗️ Tech Stack
+## 🏗️ System Architecture
 
-* **Frontend:** Flutter (Dart)
-* **Backend:** Firebase (Cloud Firestore, Firebase Auth)
-* **AI & Voice:** Groq API (Llama 3.3 70B, Whisper), `flutter_tts`
-* **Hardware Integrations:** `mobile_scanner`, `google_mlkit_image_labeling`
-* **UI/UX:** `flutter_animate`, `lottie`, Google Fonts (Bebas Neue & Nunito)
-* **Reporting:** `pdf`, `printing`
-* **Automation:** Make.com
+The codebase utilizes a clean, decoupled structure to segregate UI rendering, state management, global models, and persistent services:
 
----
+```text
+lib/
+├── main.dart                      # App entry, dark/light/inspector themes, & auth router
+├── firebase_options.dart          # Local Firebase environment variables
+├── nike_colors.dart               # Theme extensions (Standard Light/Dark & Industrial Monochrome)
+├── theme_notifier.dart             # App-wide visual theme state controller
+├── font_scale_notifier.dart        # Global accessibility configuration for text sizing
+│
+├── models/                        # Declarative system schemas
+│   ├── customer_model.dart        # Customer profile, wallet, and badges
+│   ├── hub_model.dart             # Recycling hub properties and historical logs
+│   └── shoe_model.dart            # SUID mapping, materials, and DPP timeline data
+│
+├── screens/                       # Presentation layer
+│   ├── login_screen.dart          # Customer & Admin multi-login portal
+│   ├── register_screen.dart       # Customer onboarding setup
+│   ├── inspector_punch_in_screen.dart # Employee ID & PIN handheld login keypad
+│   ├── inspector_register_screen.dart # Internal factory worker enrollment
+│   ├── customer_landing_screen.dart   # Interactive customer menu & locker access
+│   ├── customer_locker_screen.dart    # Digital Product Passport rendering
+│   ├── customer_return_confirm_screen.dart 
+│   ├── customer_return_success_screen.dart # Incentive payout interface
+│   ├── customer_profile_screen.dart
+│   ├── hub_inspector_screen.dart      # Scanner viewfinder and condition evaluation tools
+│   ├── hub_result_screen.dart         # Final routing decision and logic breakdown
+│   ├── inspector_profile_screen.dart  # Shift statistics and processing log history
+│   ├── admin_profile_screen.dart
+│   └── dashboard_screen.dart          # Headquarters analytics panel
+│
+├── services/                      # System business logic & platform wrappers
+│   ├── firebase_service.dart      # Centralized database reader/writer layer
+│   ├── chatbot_service.dart       # Groq client integration (Whisper & Llama 3.3 70B)
+│   ├── chatbot_config.dart        # Secure API settings (gitignored)
+│   └── report_service.dart        # Document generation module
+│
+├── utils/                         # Mathematical & functional utilities
+│   ├── routing_algorithm.dart     # Sole/fabric matrix logic
+│   └── region_utils.dart
+│
+└── widgets/                       # Reusable visual components
+    ├── chatbot_widget.dart        # Floating conversational overlay (all roles)
+    └── nav_controls.dart          # Adaptive navigation menus and drawers
+🔀 The Routing & Recycle Score AlgorithmWhen a returned shoe is processed, the system runs a two-step routing pipeline:Step 1: Decision Matrix (Top-Level Stream)The system checks the structural integrity of the sole and the fabric to determine the primary logistics route:Sole ConditionFabric ConditionBase Routing DecisionLogistics OutcomeIntactIntact📦 Refurbish for ResaleReturned to premium circular store shelvesDamagedIntact🧵 Flyknit Textile Re-WeavingStripped for yarn spinning & textile recoveryIntactDamaged👟 Nike Grind Rubber ShreddingConverted to playground or athletic turfDamagedDamaged♻️ Thermoplastic PelletizingBroken down to base chemical polymersStep 2: Recycle Score Calculation (Material Refinement)Once the base route is selected, the application refines the material output using physical material weight percentages. A custom Recycle Score is calculated to direct the batch to the exact sub-stream. This calculation dynamically weighs each material's density (Flyknit, Rubber, Foam, and Leather) against standard processing values to determine the ideal sorting sub-lane.🤖 AI Chatbot InfrastructureThe application features three conversational agents powered by a single, multi-persona pipeline using Groq API's Llama 3.3 70B model and Whisper large-v3 for voice processing:[User Input: Text or Voice] 
+       │
+       ▼ (Speech-to-Text via Whisper)
+[Central Chatbot Service]
+       │
+       ├─────► [If Customer Profile] ──► Inject NikeBot System Prompt + SUID Passport Info
+       ├─────► [If Hub Inspector]  ──► Inject RouteBot System Prompt + Hub Throughput Metrics
+       └─────► [If System Admin]   ──► Inject DashBot System Prompt + Global Regional KPIs
+       │
+       ▼
+ [Llama 3.3 70B Context Evaluation]
+       │
+       ▼ (Text Response & Local Speech Synthesis via Flutter TTS)
+[Natural Language Output]
+🤖 AI Assistant Persona ScopePersonaRoleKnowledge BaseNikeBotCustomerThis specific shoe's passport, lifecycle status, and NikeCoin rewards.RouteBotInspectorThe routing matrix, current hub status, and throughput data.DashBotAdminGlobal sustainability metrics and hub network stats.🗄️ Database Schema (Firestore)The application relies on a strictly structured, document-relational model within Cloud Firestore:Plaintext/Shoes (Collection)
+   ├── SUID {string} [Document ID]
+   ├── modelName {string}
+   ├── materialComposition {map}
+   │     ├── MCP_Flyknit {number}
+   │     ├── MCP_Rubber {number}
+   │     ├── MCP_Foam {number}
+   │     └── MCP_Leather {number}
+   ├── carbonFootprint {number}
+   ├── lifecycleStatus {string}
+   └── currentRoute {string}
 
-## 🚀 Getting Started
+/users (Collection)
+   ├── userID {string} [Document ID]
+   ├── name {string}
+   ├── email {string}
+   ├── role {string} [customer / inspector / admin]
+   ├── walletBalance {number}
+   └── linkedShoes {array}
 
-1. **Install Flutter** (SDK `^3.11.5`).
-2. **Clone the repo** and fetch dependencies:
-   ```bash
-   flutter pub get
+/hubs (Collection)
+   ├── hubID {string} [Document ID]
+   ├── location {string}
+   ├── processingCapacity {number}
+   ├── currentThroughput {number}
+   └── activeLanes {number}
+
+/dashboard (Collection)
+   ├── statID {string} [Document ID]
+   ├── totalCarbonDiverted {number}
+   ├── aggregateRecyclingRate {number}
+   └── totalProcessedCount {number}
+🔑 Authentication Entry PointsAuthentication is split to match real-world operational scenarios:Consumer & Executive Gateway (login_screen.dart): Standard, secure email-and-password portal with options for self-onboarding registration.Industrial Operator Portal (inspector_punch_in_screen.dart): Keypad-based punch-in screen utilizing an Employee ID and a 4-digit PIN designed specifically for warehouse use. (Under the hood, this translates securely into credentialed Firebase sessions to prevent data vulnerabilities).👥 The Development Team & ContributionsThis application was engineered by a dedicated three-person project team. Below is the detailed breakdown of our individual roles and system contributions:🎨 Rajvardhan Anil DelekarRole: Product Owner & Lead UI/UX DesignerDesign Systems: Built the full visual style, choosing a premium dark background with fluorescent lime green accents to create a high-end sport aesthetic.Responsive Layouts: Designed the interface for all three roles, ensuring proper scaling across both standard consumer smartphones and rugged factory handheld tools.User Experience (UX): Maintained user-centered agile priorities through detailed sprint planning, mockups, and card-based structural navigation layouts.🛠️ Ram Sri Karan MylavarapuRole: Scrum Master & Lead DeveloperData Layer Engineering: Designed and coded the entire Firestore data pipeline (firebase_service.dart), managing live collections and real-time state synchronization.Algorithms: Authored the multi-level decision matrix and weighted physical routing algorithms (routing_algorithm.dart).Integrations: Configured the asynchronous API handlers linking the mobile frontend to the Groq Llama and Whisper engines.Scrum Management: Coordinated developer timelines, managed continuous integration, and ran daily checks to merge UI/UX design components with backend services.📐 Stacia Agusta D'SilvaRole: Frontend Architect & Quality AssuranceStructural Architecture: Developed the clean "Shell" rendering system to safely run parallel interface workflows without file conflicts.Physical Processing Logic: Engineered the mathematical models responsible for scaling compound Material Composition Percentages into compliant recycling classifications.Quality Assurance & Performance: Conducted testing, managed local emulator configurations, and resolved Git version conflicts.🚀 Getting StartedTo spin up a local instance of Nike ReRun for testing, ensure your machine has Flutter SDK version ^3.11.5 or newer installed.Clone the Repository:Bashgit clone [https://github.com/ramsrik110/Nike_ReRun.git](https://github.com/ramsrik110/Nike_ReRun.git)
+cd Nike_ReRun
+Acquire Dependencies:Bashflutter pub get
+Initialize Firebase Services:Make sure you have the FlutterFire CLI installed on your system, then run:Bashflutterfire configure
+Add API Credentials:Duplicate the file lib/services/chatbot_config.example.dart and name it lib/services/chatbot_config.dart.Paste your active Groq API Key into the variable placeholder.Deploy & Debug:Ensure you have a simulator running or a physical device connected, then launch:Bashflutter run
