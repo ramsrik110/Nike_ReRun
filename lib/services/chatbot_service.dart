@@ -1,6 +1,6 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter_tts/flutter_tts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'chatbot_config.dart';
@@ -49,6 +49,8 @@ You know the routing matrix perfectly:
 
 You also know: wear level, structural integrity, estimated age, and cleaning all influence the final decision. Hub: Berlin (HUB-001).
 
+If a "Live hub data" block is included below, it has the real current count of shoes routed and shoes awaiting inspection. Use it directly for any question about hub activity or volume — never invent or estimate a number that's already given there.
+
 $_teamCredits
 
 Response rules — strictly follow these:
@@ -62,12 +64,7 @@ Response rules — strictly follow these:
 const _adminPrompt = '''
 You are DashBot — AI analytics assistant for Nike ReRun HQ Admins.
 
-Live dashboard data you have access to:
-- CO2 Diverted: Global 1,284t | Europe 847t | North America 437t
-- Shoes Processed: Global 48,392 | Europe 31,205 | North America 17,187
-- Recycled Material %: Global 67% | Europe 71% | North America 61% (target: 80%)
-- Active Hubs: Global 23 | Europe 14 | North America 9
-- Monthly CO2 trend (Dec→May): 1050 → 1100 → 1150 → 1200 → 1240 → 1284t
+If a "Live platform data" block is included below, it has the real current total users, shoes tracked, and closed loops across the whole platform. Use it directly for any question about platform-wide numbers — never invent or estimate a figure that's already given there. If asked about a number you don't have (e.g. a regional breakdown), say plainly that you don't have that data yet rather than guessing.
 
 $_teamCredits
 
@@ -85,6 +82,10 @@ Response rules — strictly follow these:
 
 enum ChatPersona { customer, inspector, admin }
 
+// Set by the "Nike Bot" nav-drawer item to tell that persona's ChatbotWidget
+// to open its panel — the widget clears this back to null once it's handled.
+final ValueNotifier<ChatPersona?> requestOpenChat = ValueNotifier<ChatPersona?>(null);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Chat message model
 // ─────────────────────────────────────────────────────────────────────────────
@@ -101,21 +102,6 @@ class ChatMessage {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class ChatbotService {
-  final FlutterTts _tts = FlutterTts();
-  bool _isSpeaking = false;
-
-  ChatbotService() {
-    _initTts();
-  }
-
-  void _initTts() {
-    _tts.setLanguage('en-US');
-    _tts.setSpeechRate(0.5);
-    _tts.setVolume(1.0);
-    _tts.setPitch(1.0);
-    _tts.setCompletionHandler(() => _isSpeaking = false);
-  }
-
   String _systemPrompt(ChatPersona persona) {
     switch (persona) {
       case ChatPersona.customer:  return _customerPrompt;
@@ -170,6 +156,40 @@ class ChatbotService {
         '${totalCo2.toStringAsFixed(1)}kg CO2 saved.';
   }
 
+  // ── Live inspector data (hub-wide routing activity) ───────────────────────
+  // Same two counts shown on InspectorProfileScreen's "Hub Activity" card,
+  // so the bot never says something the screen doesn't already agree with.
+
+  Future<String> _fetchInspectorContext() async {
+    final routed = await FirebaseFirestore.instance
+        .collection('Shoes')
+        .where('LCS-STS', isEqualTo: 'ROUTED.')
+        .get();
+    final pending = await FirebaseFirestore.instance
+        .collection('Shoes')
+        .where('LCS-STS', isEqualTo: 'LOOP CLOSED.')
+        .get();
+
+    return 'Live hub data: ${routed.docs.length} shoes routed so far, '
+        '${pending.docs.length} shoes returned and awaiting inspection.';
+  }
+
+  // ── Live admin data (platform-wide stats) ─────────────────────────────────
+  // Same three counts shown on AdminProfileScreen's "Platform Stats" card.
+
+  Future<String> _fetchAdminContext() async {
+    final users  = await FirebaseFirestore.instance.collection('users').get();
+    final shoes  = await FirebaseFirestore.instance.collection('Shoes').get();
+    final closed = await FirebaseFirestore.instance
+        .collection('Shoes')
+        .where('LCS-STS', isEqualTo: 'ROUTED.')
+        .get();
+
+    return 'Live platform data: ${users.docs.length} total users, '
+        '${shoes.docs.length} shoes tracked, '
+        '${closed.docs.length} loops closed.';
+  }
+
   // ── Send text message to Groq LLM ────────────────────────────────────────
 
   Future<String> sendMessage({
@@ -181,11 +201,19 @@ class ChatbotService {
         Duration(milliseconds: ChatbotConfig.requestDelayMs));
 
     String systemContent = _systemPrompt(persona);
-    if (persona == ChatPersona.customer) {
-      final liveContext = await _fetchCustomerShoeContext();
-      if (liveContext != null) {
+    switch (persona) {
+      case ChatPersona.customer:
+        final liveContext = await _fetchCustomerShoeContext();
+        if (liveContext != null) systemContent = '$systemContent\n\n$liveContext';
+        break;
+      case ChatPersona.inspector:
+        final liveContext = await _fetchInspectorContext();
         systemContent = '$systemContent\n\n$liveContext';
-      }
+        break;
+      case ChatPersona.admin:
+        final liveContext = await _fetchAdminContext();
+        systemContent = '$systemContent\n\n$liveContext';
+        break;
     }
 
     final messages = [
@@ -219,20 +247,5 @@ class ChatbotService {
     }
   }
 
-  // ── Speak response via flutter_tts ────────────────────────────────────────
-
-  Future<void> speak(String text) async {
-    if (_isSpeaking) await _tts.stop();
-    _isSpeaking = true;
-    await _tts.speak(text);
-  }
-
-  Future<void> stopSpeaking() async {
-    _isSpeaking = false;
-    await _tts.stop();
-  }
-
-  void dispose() {
-    _tts.stop();
-  }
+  void dispose() {}
 }

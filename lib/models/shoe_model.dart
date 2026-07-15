@@ -29,6 +29,9 @@ class ShoeModel {
   // ── Links & Transaction ───────────────────────────────────────────────────
   final String cuidLnk;    // CUID-LNK — Linked customer ID
   final String txnDtp;     // TXN-DTP  — Date of purchase
+  final String txnRtn;     // TXN-RTN  — Date the customer returned it (set by
+                            // the return flow; used to compute shoe age at
+                            // inspection instead of manual entry)
   final int rwdAmt;        // RWD-AMT  — NikeCoin reward amount
 
   ShoeModel({
@@ -49,6 +52,7 @@ class ShoeModel {
     required this.rteDcn,
     required this.cuidLnk,
     required this.txnDtp,
+    required this.txnRtn,
     required this.rwdAmt,
   });
 
@@ -73,6 +77,7 @@ class ShoeModel {
       rteDcn:  data['RTE-DCN'] as String? ?? '',
       cuidLnk: data['CUID-LNK'] as String? ?? '',
       txnDtp:  data['TXN-DTP'] as String? ?? '',
+      txnRtn:  data['TXN-RTN'] as String? ?? '',
       rwdAmt:  (data['RWD-AMT'] as num?)?.toInt() ?? 0,
     );
   }
@@ -97,6 +102,7 @@ class ShoeModel {
       'RTE-DCN': rteDcn,
       'CUID-LNK': cuidLnk,
       'TXN-DTP': txnDtp,
+      'TXN-RTN': txnRtn,
       'RWD-AMT': rwdAmt,
     };
   }

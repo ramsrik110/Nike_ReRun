@@ -33,8 +33,7 @@ class ChatbotWidget extends StatefulWidget {
   State<ChatbotWidget> createState() => _ChatbotWidgetState();
 }
 
-class _ChatbotWidgetState extends State<ChatbotWidget>
-    with TickerProviderStateMixin {
+class _ChatbotWidgetState extends State<ChatbotWidget> {
   final ChatbotService        _service = ChatbotService();
   final List<ChatMessage>     _history = [];
   final TextEditingController _ctrl    = TextEditingController();
@@ -45,16 +44,19 @@ class _ChatbotWidgetState extends State<ChatbotWidget>
 
   OverlayEntry? _overlayEntry;
 
-  late AnimationController _pulseCtrl;
-
   @override
   void initState() {
     super.initState();
-    _pulseCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    );
+    requestOpenChat.addListener(_handleOpenRequest);
     WidgetsBinding.instance.addPostFrameCallback((_) => _insertOverlay());
+  }
+
+  void _handleOpenRequest() {
+    if (requestOpenChat.value == widget.persona) {
+      _isOpen = true;
+      _refreshOverlay();
+      requestOpenChat.value = null;
+    }
   }
 
   void _insertOverlay() {
@@ -68,11 +70,11 @@ class _ChatbotWidgetState extends State<ChatbotWidget>
 
   @override
   void dispose() {
+    requestOpenChat.removeListener(_handleOpenRequest);
     _overlayEntry?.remove();
     _service.dispose();
     _ctrl.dispose();
     _scroll.dispose();
-    _pulseCtrl.dispose();
     super.dispose();
   }
 
@@ -99,7 +101,6 @@ class _ChatbotWidgetState extends State<ChatbotWidget>
         _isLoading = false;
         _refreshOverlay();
         _scrollToBottom();
-        await _service.speak(reply);
       }
     } catch (e) {
       if (mounted) {
@@ -110,21 +111,6 @@ class _ChatbotWidgetState extends State<ChatbotWidget>
         _scrollToBottom();
       }
     }
-  }
-
-  // ── Mic tap — placeholder for Groq Whisper STT ───────────────────────────
-
-  void _onMicTap() {
-    // TODO: implement Groq Whisper STT
-    // For demo: show a snackbar
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Speak your question...',
-            style: _body(13, color: _black)),
-        backgroundColor: _lime,
-        duration: const Duration(seconds: 2),
-      ),
-    );
   }
 
   void _scrollToBottom() {
@@ -153,67 +139,23 @@ class _ChatbotWidgetState extends State<ChatbotWidget>
   Widget build(BuildContext context) => const SizedBox.shrink();
 
   Widget _buildOverlay() {
+    if (!_isOpen) return const SizedBox.shrink();
     return Positioned.fill(
       child: Stack(
         children: [
-          if (_isOpen)
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: () {
-                  _isOpen = false;
-                  _refreshOverlay();
-                },
-                child: Container(color: Colors.transparent),
-              ),
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () {
+                _isOpen = false;
+                _refreshOverlay();
+              },
+              child: Container(color: Colors.transparent),
             ),
-          if (_isOpen) _buildChatPanel(),
-          if (!_isOpen)
-            Positioned(
-              bottom: 180,
-              right: 20,
-              child: _buildFab(),
-            ),
+          ),
+          _buildChatPanel(),
         ],
       ),
     );
-  }
-
-  // ── Floating action button ────────────────────────────────────────────────
-
-  Widget _buildFab() {
-    return GestureDetector(
-      onTap: () {
-        _isOpen = true;
-        _refreshOverlay();
-      },
-      child: Container(
-        width: 60,
-        height: 60,
-        decoration: BoxDecoration(
-          color: _lime,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: _lime.withOpacity(0.4),
-              blurRadius: 16,
-              spreadRadius: 2,
-            ),
-          ],
-        ),
-        child: const Icon(
-          Icons.chat_bubble_rounded,
-          color: _black,
-          size: 26,
-        ),
-      ),
-    )
-        .animate(onPlay: (c) => c.repeat(reverse: true))
-        .scaleXY(
-          begin: 1.0,
-          end: 1.06,
-          duration: 1200.ms,
-          curve: Curves.easeInOut,
-        );
   }
 
   // ── Chat panel ────────────────────────────────────────────────────────────
@@ -277,11 +219,6 @@ class _ChatbotWidgetState extends State<ChatbotWidget>
           const SizedBox(width: 10),
           Text(_botName, style: _heading(18, color: _lime)),
           const Spacer(),
-          GestureDetector(
-            onTap: _service.stopSpeaking,
-            child: Icon(Icons.volume_off, color: _grey, size: 18),
-          ),
-          const SizedBox(width: 14),
           GestureDetector(
             onTap: () {
               _isOpen = false;
@@ -379,21 +316,6 @@ class _ChatbotWidgetState extends State<ChatbotWidget>
       ),
       child: Row(
         children: [
-          // Mic button
-          GestureDetector(
-            onTap: _onMicTap,
-            child: Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: _lime.withOpacity(0.15),
-                shape: BoxShape.circle,
-                border: Border.all(color: _lime, width: 1),
-              ),
-              child: const Icon(Icons.mic, color: _lime, size: 20),
-            ),
-          ),
-          const SizedBox(width: 8),
           // Text input
           Expanded(
             child: TextField(

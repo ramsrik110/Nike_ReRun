@@ -83,12 +83,19 @@ class _CustomerReturnConfirmScreenState
     if (user == null) return;
 
     try {
+      final now = DateTime.now();
+      final returnDate =
+          '${now.month.toString().padLeft(2, '0')}/${now.day.toString().padLeft(2, '0')}/${now.year}';
+
       await FirebaseFirestore.instance
           .collection('Shoes')
           .doc(widget.shoe.suid)
           .update({
         'LCS-STS': 'LOOP CLOSED.',
         'RTE-DCN': 'RETURN INITIATED.',
+        // Return date, paired with TXN-DTP so the Inspector can compute
+        // the shoe's age at inspection instead of manual entry.
+        'TXN-RTN': returnDate,
       });
 
       await FirebaseFirestore.instance

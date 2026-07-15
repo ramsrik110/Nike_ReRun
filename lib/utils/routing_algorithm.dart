@@ -4,38 +4,40 @@ import '../models/shoe_model.dart';
 // Input enums
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum SoleCondition { intact, damaged }
-enum FabricCondition { intact, damaged }
+enum SoleCondition { fresh, worn, damaged }
+enum FabricCondition { fresh, worn, damaged }
 enum WearLevel { light, moderate, heavy }
 enum StructuralIntegrity { intact, minorDamage, majorDamage }
 enum EstimatedAge { underOneYear, oneToTwo, twoToThree, overThree }
 
 // String → enum helpers (map from pill/dropdown label text)
 extension SoleConditionX on String {
-  SoleCondition toSoleCondition() =>
-      toLowerCase() == 'done.' ? SoleCondition.damaged : SoleCondition.intact;
-  FabricCondition toFabricCondition() =>
-      toLowerCase() == 'done.' ? FabricCondition.damaged : FabricCondition.intact;
+  SoleCondition toSoleCondition() {
+    switch (this) {
+      case 'Fresh':   return SoleCondition.fresh;
+      case 'Worn':    return SoleCondition.worn;
+      default:        return SoleCondition.damaged;
+    }
+  }
+  FabricCondition toFabricCondition() {
+    switch (this) {
+      case 'Fresh':   return FabricCondition.fresh;
+      case 'Worn':    return FabricCondition.worn;
+      default:        return FabricCondition.damaged;
+    }
+  }
   WearLevel toWearLevel() {
-    switch (toLowerCase()) {
-      case 'moderate': return WearLevel.moderate;
-      case 'heavy':    return WearLevel.heavy;
+    switch (this) {
+      case 'Moderate': return WearLevel.moderate;
+      case 'Heavy':    return WearLevel.heavy;
       default:         return WearLevel.light;
     }
   }
   StructuralIntegrity toStructuralIntegrity() {
-    switch (toLowerCase()) {
-      case 'minor damage': return StructuralIntegrity.minorDamage;
-      case 'major damage': return StructuralIntegrity.majorDamage;
-      default:             return StructuralIntegrity.intact;
-    }
-  }
-  EstimatedAge toEstimatedAge() {
     switch (this) {
-      case 'Under 1 Year': return EstimatedAge.underOneYear;
-      case '1–2 Years':    return EstimatedAge.oneToTwo;
-      case '2–3 Years':    return EstimatedAge.twoToThree;
-      default:             return EstimatedAge.overThree;
+      case 'Minor Damage': return StructuralIntegrity.minorDamage;
+      case 'Major Damage': return StructuralIntegrity.majorDamage;
+      default:             return StructuralIntegrity.intact;
     }
   }
 }
@@ -45,162 +47,172 @@ extension SoleConditionX on String {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class RoutingResult {
-  final String decision;          // Short ALL CAPS Nike headline — stored in RTE-DCN
-  final String routeName;         // Full route name
-  final String whatNext;          // Description of next processing step
-  final String conditionGrade;    // Shoe Grade label
-  final String materialMatch;     // Material driving sub-stream
-  final int    nikeCoinReward;    // Reward based on age
-  final String wearLevelLabel;    // Human-readable wear level
-  final String structuralLabel;   // Human-readable structural integrity
-  final String estimatedAgeLabel; // Human-readable age
-  final bool   cleaningRequired;  // Whether cleaning is needed
+  final bool   resellable;          // drives the lime-vs-dark result screen wash
+  final String routingInstruction;  // the big headline — "To sole rework." etc,
+                                     // stored in RTE-DCN
+  final String subLabel;            // small subtext: condition grade or Grind stream
+  final String materialMatch;       // material driving the sub-stream
+  final String wearLevelLabel;
+  final String structuralLabel;
+  final String soleLabel;
+  final String fabricLabel;
+  final String estimatedAgeLabel;
+  final bool   cleaningRequired;
 
   const RoutingResult({
-    required this.decision,
-    required this.routeName,
-    required this.whatNext,
-    required this.conditionGrade,
+    required this.resellable,
+    required this.routingInstruction,
+    required this.subLabel,
     required this.materialMatch,
-    required this.nikeCoinReward,
     required this.wearLevelLabel,
     required this.structuralLabel,
+    required this.soleLabel,
+    required this.fabricLabel,
     required this.estimatedAgeLabel,
     required this.cleaningRequired,
   });
 
   @override
-  String toString() => 'RoutingResult(decision: $decision)';
+  String toString() => 'RoutingResult(routingInstruction: $routingInstruction)';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The algorithm
+//
+// Gate: a shoe is resellable unless structural integrity is majorly damaged,
+// or the sole or fabric is damaged beyond use. Everything else (Worn sole/
+// fabric, Minor structural damage, heavier cosmetic wear) stays resellable
+// but downgrades the grade and flags refurbishment first.
+//
+// Recycle stream is named after whichever material is still salvageable —
+// e.g. sole damaged but fabric intact means the fabric gets recovered, so
+// the shoe routes "To fabric rework."
 // ─────────────────────────────────────────────────────────────────────────────
 
 class RoutingAlgorithm {
-  /// Run the full routing algorithm with all six grading inputs.
   static RoutingResult run({
     required ShoeModel          shoe,
     required SoleCondition      soleCondition,
     required FabricCondition    fabricCondition,
     required WearLevel          wearLevel,
     required StructuralIntegrity structuralIntegrity,
-    required EstimatedAge       estimatedAge,
     required bool               cleaningRequired,
   }) {
-    // ── Step 1: Primary routing from 2×2 condition matrix ─────────────────
-    final bool soleOk   = soleCondition   == SoleCondition.intact;
-    final bool fabricOk = fabricCondition == FabricCondition.intact;
+    final soleDamaged   = soleCondition   == SoleCondition.damaged;
+    final fabricDamaged = fabricCondition == FabricCondition.damaged;
+    final structuralMajor = structuralIntegrity == StructuralIntegrity.majorDamage;
 
-    String decision;
-    String routeName;
+    final resellable = !structuralMajor && !soleDamaged && !fabricDamaged;
+    final estimatedAge = _computeAge(shoe);
 
-    if (soleOk && fabricOk) {
-      decision  = 'FRESH START.';
-      routeName = 'Refurbish for Resale';
-    } else if (!soleOk && fabricOk) {
-      decision  = 'BACK TO FABRIC.';
-      routeName = 'Flyknit Textile Re-Weaving';
-    } else if (soleOk && !fabricOk) {
-      decision  = 'BACK TO RUBBER.';
-      routeName = 'Nike Grind Rubber Shredding';
+    String routingInstruction;
+    String subLabel;
+    String materialMatch;
+
+    if (resellable) {
+      // Headline is always "To resale." here — grade is informational
+      // context (subLabel), never a different main outcome. "Cleaning
+      // Required" is surfaced separately as its own footnote in the UI
+      // (see RoutingResult.cleaningRequired), it never changes this
+      // headline on any outcome, resale or recycle.
+      final grade = _grade(soleCondition, fabricCondition, wearLevel, structuralIntegrity);
+      routingInstruction = 'To resale.';
+      subLabel           = grade;
+      materialMatch       = _materialMatchResale(shoe);
     } else {
-      decision  = 'FULL BREAK DOWN.';
-      routeName = 'Thermoplastic Pelletizing';
+      if (soleDamaged && !fabricDamaged) {
+        routingInstruction = 'To fabric rework.';
+        subLabel           = 'Nike Grind: Fiber';
+        materialMatch       = _materialMatchFiber(shoe);
+      } else if (fabricDamaged && !soleDamaged) {
+        routingInstruction = 'To sole rework.';
+        subLabel           = 'Nike Grind: Rubber';
+        materialMatch       = _materialMatchRubber(shoe);
+      } else {
+        routingInstruction = 'To full recycle.';
+        subLabel           = 'Nike Grind: Full breakdown';
+        materialMatch       = _materialMatchBreakdown(shoe);
+      }
     }
-
-    // Override to full breakdown if structural integrity is majorDamage
-    if (structuralIntegrity == StructuralIntegrity.majorDamage) {
-      decision  = 'FULL BREAK DOWN.';
-      routeName = 'Thermoplastic Pelletizing';
-    }
-
-    // ── Step 2: Condition grade ────────────────────────────────────────────
-    final String conditionGrade = _grade(soleOk, fabricOk, wearLevel, structuralIntegrity);
-
-    // ── Step 3: Material match ─────────────────────────────────────────────
-    final String materialMatch = _materialMatch(shoe, soleOk, fabricOk);
-
-    // ── Step 4: What's next ────────────────────────────────────────────────
-    final String whatNext = _whatNext(routeName, cleaningRequired);
-
-    // ── Step 5: NikeCoin reward based on age ──────────────────────────────
-    final int nikeCoinReward = _coinReward(estimatedAge);
-
-    // ── Step 6: Human-readable labels ─────────────────────────────────────
-    final String wearLevelLabel      = _wearLabel(wearLevel);
-    final String structuralLabel     = _structuralLabel(structuralIntegrity);
-    final String estimatedAgeLabel   = _ageLabel(estimatedAge);
 
     return RoutingResult(
-      decision:          decision,
-      routeName:         routeName,
-      whatNext:          whatNext,
-      conditionGrade:    conditionGrade,
-      materialMatch:     materialMatch,
-      nikeCoinReward:    nikeCoinReward,
-      wearLevelLabel:    wearLevelLabel,
-      structuralLabel:   structuralLabel,
-      estimatedAgeLabel: estimatedAgeLabel,
-      cleaningRequired:  cleaningRequired,
+      resellable:          resellable,
+      routingInstruction:  routingInstruction,
+      subLabel:            subLabel,
+      materialMatch:       materialMatch,
+      wearLevelLabel:      _wearLabel(wearLevel),
+      structuralLabel:     _structuralLabel(structuralIntegrity),
+      soleLabel:           _conditionLabel(soleCondition.name),
+      fabricLabel:         _conditionLabel(fabricCondition.name),
+      estimatedAgeLabel:   _ageLabel(estimatedAge),
+      // Always the inspector's raw input, shown as its own note regardless
+      // of outcome — not folded into the resale-grade "needs refurb" logic.
+      cleaningRequired:    cleaningRequired,
     );
   }
 
-  // ── Condition grade ───────────────────────────────────────────────────────
-  static String _grade(bool soleOk, bool fabricOk, WearLevel wear,
-      StructuralIntegrity integrity) {
-    if (integrity == StructuralIntegrity.majorDamage) return 'Grade D — Severe';
-    if (soleOk && fabricOk && wear == WearLevel.light) return 'Grade A — Resaleable';
-    if (soleOk && fabricOk) return 'Grade B — Good Condition';
-    if (!soleOk && fabricOk)  return 'Grade B — Fabric Intact';
-    if (soleOk && !fabricOk)  return 'Grade B — Sole Intact';
-    return 'Grade C — Full Breakdown';
+  // ── Age — computed from purchase (TXN-DTP) to return (TXN-RTN) dates on
+  // the shoe record, never manually entered by the inspector. Falls back to
+  // "now" as the return point when TXN-RTN isn't set (e.g. seed/demo shoes
+  // that were never run through a real customer return).
+  static EstimatedAge _computeAge(ShoeModel shoe) {
+    final purchased = _parseDate(shoe.txnDtp);
+    if (purchased == null) return EstimatedAge.overThree;
+    final returned = _parseDate(shoe.txnRtn) ?? DateTime.now();
+    final months = returned.difference(purchased).inDays / 30.44;
+    if (months < 12) return EstimatedAge.underOneYear;
+    if (months < 24) return EstimatedAge.oneToTwo;
+    if (months < 36) return EstimatedAge.twoToThree;
+    return EstimatedAge.overThree;
+  }
+
+  /// Parses the app's stored date strings, format "MM/DD/YYYY".
+  static DateTime? _parseDate(String value) {
+    if (value.isEmpty) return null;
+    final parts = value.split('/');
+    if (parts.length != 3) return null;
+    final month = int.tryParse(parts[0]);
+    final day   = int.tryParse(parts[1]);
+    final year  = int.tryParse(parts[2]);
+    if (month == null || day == null || year == null) return null;
+    return DateTime(year, month, day);
+  }
+
+  // ── Grade (resale path only) ────────────────────────────────────────────
+  static String _grade(SoleCondition sole, FabricCondition fabric,
+      WearLevel wear, StructuralIntegrity structural) {
+    if (wear == WearLevel.heavy) return 'Cosmetically Flawed';
+    if (sole == SoleCondition.worn ||
+        fabric == FabricCondition.worn ||
+        wear == WearLevel.moderate ||
+        structural == StructuralIntegrity.minorDamage) {
+      return 'Gently Worn';
+    }
+    return 'Like New';
   }
 
   // ── Material match ────────────────────────────────────────────────────────
-  static String _materialMatch(ShoeModel shoe, bool soleOk, bool fabricOk) {
-    if (soleOk && fabricOk) {
-      if (shoe.mcpLth > 0) return 'Leather ${shoe.mcpLth.toInt()}% — Premium Clean';
-      if (shoe.mcpFlk > 0) return 'Flyknit ${shoe.mcpFlk.toInt()}% — Textile Clean';
-      return 'Multi-material — Standard Clean';
-    }
-    if (!soleOk && fabricOk) {
-      if (shoe.mcpFlk >= 40) return 'Flyknit ${shoe.mcpFlk.toInt()}% — High-Yield Weave';
-      if (shoe.mcpFlk > 0)   return 'Flyknit ${shoe.mcpFlk.toInt()}% — Blended Weave';
-      return 'Synthetic Textile — Standard Weave';
-    }
-    if (soleOk && !fabricOk) {
-      if (shoe.mcpRbr >= 30) return 'Rubber ${shoe.mcpRbr.toInt()}% — High-Density Grind';
-      return 'Rubber ${shoe.mcpRbr.toInt()}% — Standard Grind';
-    }
-    if (shoe.mcpFom >= 40) return 'Foam ${shoe.mcpFom.toInt()}% — High-Foam Pelletize';
-    if (shoe.mcpRbr >= 30) return 'Rubber ${shoe.mcpRbr.toInt()}% — Rubber Pelletize';
-    return 'Multi-material — Blended Pelletize';
+  static String _materialMatchResale(ShoeModel shoe) {
+    if (shoe.mcpLth > 0) return 'Leather ${shoe.mcpLth.toInt()}% — premium clean';
+    if (shoe.mcpFlk > 0) return 'Flyknit ${shoe.mcpFlk.toInt()}% — textile clean';
+    return 'Multi-material — standard clean';
   }
 
-  // ── What's next ───────────────────────────────────────────────────────────
-  static String _whatNext(String routeName, bool cleaning) {
-    final suffix = cleaning ? ' Cleaning required first.' : '';
-    switch (routeName) {
-      case 'Refurbish for Resale':
-        return 'Inspect and list on Nike Refurbished.$suffix';
-      case 'Flyknit Textile Re-Weaving':
-        return 'Upper yarn extracted for new Flyknit fabric.$suffix';
-      case 'Nike Grind Rubber Shredding':
-        return 'Sole shredded into Nike Grind for sports surfaces.$suffix';
-      default:
-        return 'Full breakdown into thermoplastic pellets.$suffix';
-    }
+  static String _materialMatchFiber(ShoeModel shoe) {
+    if (shoe.mcpFlk >= 40) return 'Flyknit ${shoe.mcpFlk.toInt()}% — high-yield weave';
+    if (shoe.mcpFlk > 0)   return 'Flyknit ${shoe.mcpFlk.toInt()}% — blended weave';
+    return 'Synthetic textile — standard weave';
   }
 
-  // ── NikeCoin reward by age ────────────────────────────────────────────────
-  static int _coinReward(EstimatedAge age) {
-    switch (age) {
-      case EstimatedAge.underOneYear: return 150;
-      case EstimatedAge.oneToTwo:     return 120;
-      case EstimatedAge.twoToThree:   return 80;
-      case EstimatedAge.overThree:    return 50;
-    }
+  static String _materialMatchRubber(ShoeModel shoe) {
+    if (shoe.mcpRbr >= 30) return 'Rubber ${shoe.mcpRbr.toInt()}% — high-density grind';
+    return 'Rubber ${shoe.mcpRbr.toInt()}% — standard grind';
+  }
+
+  static String _materialMatchBreakdown(ShoeModel shoe) {
+    if (shoe.mcpFom >= 40) return 'Foam ${shoe.mcpFom.toInt()}% — high-foam pelletize';
+    if (shoe.mcpRbr >= 30) return 'Rubber ${shoe.mcpRbr.toInt()}% — rubber pelletize';
+    return 'Multi-material — blended pelletize';
   }
 
   // ── Human-readable labels ─────────────────────────────────────────────────
@@ -217,6 +229,14 @@ class RoutingAlgorithm {
       case StructuralIntegrity.intact:      return 'Fully Intact';
       case StructuralIntegrity.minorDamage: return 'Minor Damage';
       case StructuralIntegrity.majorDamage: return 'Major Damage';
+    }
+  }
+
+  static String _conditionLabel(String enumName) {
+    switch (enumName) {
+      case 'fresh':   return 'Fresh';
+      case 'worn':    return 'Worn';
+      default:        return 'Damaged';
     }
   }
 

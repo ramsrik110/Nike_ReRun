@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:video_player/video_player.dart';
 import '../nike_colors.dart';
+import '../services/chatbot_service.dart';
+import '../widgets/nav_controls.dart';
 import 'customer_locker_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -18,8 +22,9 @@ const _black = Color(0xFF111111);
 
 class CustomerLandingScreen extends StatefulWidget {
   final VoidCallback? onScanTap;
+  final ValueChanged<int>? onNavSelect;
 
-  const CustomerLandingScreen({super.key, this.onScanTap});
+  const CustomerLandingScreen({super.key, this.onScanTap, this.onNavSelect});
 
   @override
   State<CustomerLandingScreen> createState() =>
@@ -27,10 +32,15 @@ class CustomerLandingScreen extends StatefulWidget {
 }
 
 class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+
   int    _count     = 0;
   int    _prevCount = 0;
   bool   _loaded    = false;
   Timer? _ticker;
+
+  late final VideoPlayerController _videoController;
+  bool _videoReady = false;
 
   NikeColors get _c => context.nc;
 
@@ -38,11 +48,22 @@ class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
   void initState() {
     super.initState();
     _fetchCount();
+
+    _videoController = VideoPlayerController.asset('assets/videos/AD.mp4')
+      ..setLooping(true)
+      ..setVolume(0);
+    _videoController.initialize().then((_) {
+      if (mounted) {
+        setState(() => _videoReady = true);
+        _videoController.play();
+      }
+    });
   }
 
   @override
   void dispose() {
     _ticker?.cancel();
+    _videoController.dispose();
     super.dispose();
   }
 
@@ -108,8 +129,10 @@ class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
   void _enterLocker() {
     Navigator.of(context).push(
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) =>
-            CustomerLockerScreen(onScanTap: widget.onScanTap),
+        pageBuilder: (_, __, ___) => CustomerLockerScreen(
+          onScanTap: widget.onScanTap,
+          onNavSelect: widget.onNavSelect,
+        ),
         transitionsBuilder: (_, anim, __, child) => FadeTransition(
           opacity: CurvedAnimation(parent: anim, curve: Curves.easeInOut),
           child: child,
@@ -125,10 +148,26 @@ class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
   Widget build(BuildContext context) {
     final c = _c;
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: c.bg,
+      endDrawer: _buildNavDrawer(c),
       body: Stack(
         fit: StackFit.expand,
         children: [
+          // ── Ad video background (surprise reveal) ─────────────────────
+          if (_videoReady)
+            FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: _videoController.value.size.width,
+                height: _videoController.value.size.height,
+                child: VideoPlayer(_videoController),
+              ),
+            ),
+
+          // ── Scrim for text readability over the video ─────────────────
+          Container(color: Colors.black.withOpacity(0.55)),
+
           // ── Radial lime glow ──────────────────────────────────────────
           Container(
             decoration: BoxDecoration(
@@ -149,7 +188,7 @@ class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
           // ── Content ───────────────────────────────────────────────────
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(28, 0, 28, 110),
+              padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -176,22 +215,56 @@ class _CustomerLandingScreenState extends State<CustomerLandingScreen> {
 
   Widget _buildLogo(NikeColors c) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        ColorFiltered(
-          colorFilter: const ColorFilter.mode(_lime, BlendMode.modulate),
-          child: Image.asset('assets/images/nikererun.png', height: 26),
+        Row(
+          children: [
+            ColorFiltered(
+              colorFilter: const ColorFilter.mode(_lime, BlendMode.modulate),
+              child: Image.asset('assets/images/nikererun.png', height: 26),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'RERUN',
+              style: GoogleFonts.bebasNeue(
+                fontSize: 22,
+                color: c.text,
+                letterSpacing: 2,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Text(
-          'RERUN',
-          style: GoogleFonts.bebasNeue(
-            fontSize: 22,
-            color: c.text,
-            letterSpacing: 2,
-          ),
+        CircleIconButton(
+          icon: Icons.menu_rounded,
+          c: c,
+          onTap: () => _scaffoldKey.currentState?.openEndDrawer(),
         ),
       ],
     ).animate().fadeIn(duration: 500.ms);
+  }
+
+  // ── Nav drawer (replaces bottom nav bar on this screen) ────────────────────
+
+  Widget _buildNavDrawer(NikeColors c) {
+    return NavDrawer(
+      c: c,
+      chatPersona: ChatPersona.customer,
+      onSignOut: () => FirebaseAuth.instance.signOut(),
+      items: [
+        NavDrawerItem(icon: Icons.home, label: 'Home', selected: true,
+            onTap: () => Navigator.of(context).pop()),
+        NavDrawerItem(icon: Icons.qr_code, label: 'Scan',
+            onTap: () {
+              Navigator.of(context).pop();
+              widget.onNavSelect?.call(1);
+            }),
+        NavDrawerItem(icon: Icons.person, label: 'Profile',
+            onTap: () {
+              Navigator.of(context).pop();
+              widget.onNavSelect?.call(2);
+            }),
+      ],
+    );
   }
 
   // ── Hero headline ─────────────────────────────────────────────────────────

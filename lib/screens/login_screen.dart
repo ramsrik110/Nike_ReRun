@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../nike_colors.dart';
+import 'inspector_punch_in_screen.dart';
 import 'register_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -70,6 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey   = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _passCtrl  = TextEditingController();
+  final _passFocus = FocusNode();
 
   bool    _loading     = false;
   bool    _obscurePass = true;
@@ -81,6 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _emailCtrl.dispose();
     _passCtrl.dispose();
+    _passFocus.dispose();
     super.dispose();
   }
 
@@ -91,20 +93,12 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() { _loading = true; _errorMsg = null; });
 
     try {
-      final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
         email:    _emailCtrl.text.trim(),
         password: _passCtrl.text.trim(),
       );
-
-      // Fetch role from Firestore users collection
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(credential.user!.uid)
-          .get();
-
-      final role = userDoc.data()?['role'] as String? ?? 'unknown';
-
-      if (mounted) _routeByRole(role);
+      // No manual navigation here — _AuthGate's authStateChanges stream
+      // picks up the sign-in and routes to the right persona shell.
     } on FirebaseAuthException catch (e) {
       setState(() {
         _loading  = false;
@@ -116,30 +110,6 @@ class _LoginScreenState extends State<LoginScreen> {
         _errorMsg = 'Error: ${e.toString()}';
       });
     }
-  }
-
-  void _routeByRole(String role) {
-    Widget destination;
-    switch (role) {
-      case 'inspector':
-        destination = const _InspectorShell();
-        break;
-      case 'admin':
-        destination = const _AdminShell();
-        break;
-      default:
-        destination = const _CustomerShell();
-    }
-
-    Navigator.of(context).pushAndRemoveUntil(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => destination,
-        transitionsBuilder: (_, anim, __, child) =>
-            FadeTransition(opacity: anim, child: child),
-        transitionDuration: const Duration(milliseconds: 400),
-      ),
-      (route) => false,
-    );
   }
 
   String _friendlyError(String code) {
@@ -198,6 +168,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       icon:         Icons.email_outlined,
                       delay:        150,
                       keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      onFieldSubmitted: (_) => _passFocus.requestFocus(),
                       validator:    (v) =>
                           v == null || !v.contains('@') ? 'Enter a valid email.' : null,
                     ),
@@ -205,12 +177,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     _buildField(
                       c:             c,
                       controller:    _passCtrl,
+                      focusNode:     _passFocus,
                       label:         'Password',
                       icon:          Icons.lock_outline,
                       delay:         200,
                       obscure:       _obscurePass,
                       toggleObscure: () =>
                           setState(() => _obscurePass = !_obscurePass),
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _signIn(),
                       validator: (v) =>
                           v == null || v.isEmpty ? 'Enter your password.' : null,
                     ),
@@ -218,6 +193,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     _buildSignInButton(),
                     const SizedBox(height: 20),
                     _buildRegisterLink(c),
+                    const SizedBox(height: 12),
+                    _buildInspectorLink(c),
                     const SizedBox(height: 40),
                   ],
                 ),
@@ -281,11 +258,17 @@ class _LoginScreenState extends State<LoginScreen> {
     bool obscure = false,
     VoidCallback? toggleObscure,
     String? Function(String?)? validator,
+    FocusNode? focusNode,
+    TextInputAction? textInputAction,
+    ValueChanged<String>? onFieldSubmitted,
   }) {
     return TextFormField(
       controller:   controller,
+      focusNode:    focusNode,
       obscureText:  obscure,
       keyboardType: keyboardType,
+      textInputAction:  textInputAction,
+      onFieldSubmitted: onFieldSubmitted,
       style:        GoogleFonts.nunito(fontSize: 16, color: c.text),
       validator:    validator,
       decoration: InputDecoration(
@@ -380,68 +363,29 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     ).animate().fadeIn(delay: 400.ms, duration: 400.ms);
   }
-}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Role-based shells (defined here to avoid circular imports)
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _InspectorShell extends StatelessWidget {
-  const _InspectorShell();
-  @override
-  Widget build(BuildContext context) => const _RoleScaffold(role: 'inspector');
-}
-
-class _AdminShell extends StatelessWidget {
-  const _AdminShell();
-  @override
-  Widget build(BuildContext context) => const _RoleScaffold(role: 'admin');
-}
-
-class _CustomerShell extends StatelessWidget {
-  const _CustomerShell();
-  @override
-  Widget build(BuildContext context) => const _RoleScaffold(role: 'customer');
-}
-
-class _RoleScaffold extends StatefulWidget {
-  final String role;
-  const _RoleScaffold({required this.role});
-
-  @override
-  State<_RoleScaffold> createState() => _RoleScaffoldState();
-}
-
-class _RoleScaffoldState extends State<_RoleScaffold> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const _AppRoot()),
-          (route) => false,
-        );
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: context.nc.bg,
-      body: const Center(
-        child: CircularProgressIndicator(color: Color(0xFFCDFC49)),
+  Widget _buildInspectorLink(NikeColors c) {
+    return Center(
+      child: GestureDetector(
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const InspectorPunchInScreen()),
+        ),
+        child: RichText(
+          text: TextSpan(
+            style: GoogleFonts.nunito(fontSize: 13, color: c.sub),
+            children: [
+              const TextSpan(text: 'Hub inspector? '),
+              TextSpan(
+                text: 'Punch in here',
+                style: GoogleFonts.nunito(
+                    fontSize: 13, color: c.sub,
+                    fontWeight: FontWeight.w700,
+                    decoration: TextDecoration.underline),
+              ),
+            ],
+          ),
+        ),
       ),
-    );
-  }
-}
-
-// Minimal re-export of the app root so login can trigger full StreamBuilder re-route
-class _AppRoot extends StatelessWidget {
-  const _AppRoot();
-  @override
-  Widget build(BuildContext context) {
-    return const SizedBox.shrink(); // replaced by main.dart stream
+    ).animate().fadeIn(delay: 450.ms, duration: 400.ms);
   }
 }

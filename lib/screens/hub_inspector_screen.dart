@@ -3,18 +3,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../models/shoe_model.dart';
 import '../nike_colors.dart';
 import '../theme_notifier.dart';
 import '../utils/routing_algorithm.dart';
+import '../services/chatbot_service.dart';
+import '../widgets/nav_controls.dart';
 import 'hub_result_screen.dart';
-import 'login_screen.dart';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Constants that never change with theme
-// ─────────────────────────────────────────────────────────────────────────────
-const _lime  = NikeColors.lime;
-const _black = NikeColors.black;
 
 TextStyle _heading(double size, {Color color = const Color(0xFFFFFFFF)}) =>
     GoogleFonts.bebasNeue(fontSize: size, color: color, letterSpacing: 1.5);
@@ -23,64 +19,124 @@ TextStyle _body(double size, {Color color = const Color(0xFFFFFFFF)}) =>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen
+//
+// Inspector's landing screen. Camera starts the instant this tab is active —
+// no tap-to-scan. On detection the shoe opens immediately for grading; once
+// routed, nothing about that shoe is kept on screen or in local state beyond
+// a "Last Routed" summary card — the inspector processes far too many shoes
+// to accumulate a visible history. Aggregate productivity (count + avg time)
+// is written to the inspector's own user doc and surfaced only in the nav
+// drawer, not here.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class HubInspectorScreen extends StatefulWidget {
-  const HubInspectorScreen({super.key});
+  final bool isActive;
+  final ValueChanged<int>? onNavSelect;
+  const HubInspectorScreen({super.key, required this.isActive, this.onNavSelect});
 
   @override
   State<HubInspectorScreen> createState() => _HubInspectorScreenState();
 }
 
-class _HubInspectorScreenState extends State<HubInspectorScreen>
-    with TickerProviderStateMixin {
+class _HubInspectorScreenState extends State<HubInspectorScreen> {
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+
   bool       _scanned = false;
   bool       _loading = false;
+  bool       _cameraError = false;
+  bool       _processingScan = false;
   ShoeModel? _shoe;
+  DateTime?  _scanStartTime;
 
-  late AnimationController _scanLineCtrl;
-  late Animation<double>   _scanLineAnim;
+  String? _lastRoutedName;
+  String? _lastRoutedInstruction;
+
+  late final MobileScannerController _scanner;
 
   String? _soleCondition;
   String? _fabricCondition;
   String? _wearLevel;
   String? _structural;
-  String  _estimatedAge  = 'Under 1 Year';
   bool    _cleaningReq   = false;
 
-  final Map<String, int> _pillTapCount = {};
+  bool get _isDark => inspectorDarkMode.value;
+  NikeColors get _c => _isDark ? NikeColors.inspectorDark : NikeColors.inspectorLight;
 
-  final List<String> _demoSuids = [
-    'NR-2024-AF1-0001',
-    'NR-2024-PEG-0003',
-    'NR-2024-STP-0005',
-    'NR-2024-AM90-0006',
-    'NR-2024-PEG-0007',
-    'NR-2024-REV-0008',
-    'NR-2024-AM270-0009',
-    'NR-2024-MTC-0010',
-    'NR-2024-FRN-0011',
-  ];
-  int _demoIndex = 0;
-
-  NikeColors get _c => context.nc;
+  // Dark mode: outline emphasis (transparent fill, text-colored border/text).
+  // Light mode: inverted-fill emphasis (solid fill, bg-colored text).
+  // Used for buttons/selected pills instead of a lime accent.
+  BoxDecoration _emphasisDecoration({double radius = 10, double borderWidth = 1}) =>
+      BoxDecoration(
+        color: _isDark ? Colors.transparent : _c.text,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: _c.text, width: borderWidth),
+      );
+  Color get _emphasisTextColor => _isDark ? _c.text : _c.bg;
 
   @override
   void initState() {
     super.initState();
-    _scanLineCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
-    _scanLineAnim = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _scanLineCtrl, curve: Curves.easeInOut),
+    _scanner = MobileScannerController(
+      detectionSpeed: DetectionSpeed.noDuplicates,
+      // Laptops only have a front webcam — requesting the (nonexistent)
+      // back camera can fail the constraint entirely on some browsers even
+      // with permission granted. Front-facing matches what's actually
+      // being tested and presented on.
+      facing: CameraFacing.front,
+      autoStart: false,
     );
+    inspectorDarkMode.addListener(_onThemeChanged);
+
+    // Deferred to after the first frame — unlike the Customer scan tab
+    // (which isn't the default tab, so it's always already built by the
+    // time it activates), Inspector's scan screen IS the default tab, so
+    // starting the camera synchronously here would fire before the
+    // MobileScanner widget has ever been attached to the page.
+    if (widget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.isActive) _startCamera();
+      });
+    }
+  }
+
+  void _onThemeChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didUpdateWidget(HubInspectorScreen old) {
+    super.didUpdateWidget(old);
+    if (widget.isActive && !old.isActive && !_scanned) {
+      _startCamera();
+    } else if (!widget.isActive && old.isActive) {
+      _scanner.stop();
+    }
   }
 
   @override
   void dispose() {
-    _scanLineCtrl.dispose();
+    _scanner.dispose();
+    inspectorDarkMode.removeListener(_onThemeChanged);
     super.dispose();
+  }
+
+  void _startCamera() {
+    setState(() => _cameraError = false);
+    _scanner.start().catchError((Object e) {
+      debugPrint('[Inspector] camera start failed: $e');
+      if (mounted) setState(() => _cameraError = true);
+    });
+  }
+
+  // ── Camera detection ──────────────────────────────────────────────────────
+
+  void _onDetect(BarcodeCapture capture) {
+    if (_processingScan || _scanned) return;
+    final raw = capture.barcodes.firstOrNull?.rawValue;
+    if (raw == null || raw.isEmpty) return;
+    _processingScan = true;
+    _scanner.stop();
+    _fetchShoe(raw);
   }
 
   // ── Fetch shoe from Firestore ─────────────────────────────────────────────
@@ -99,12 +155,14 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Shoe $suid not found.',
+              content: Text('Shoe not recognized. Try again.',
                   style: _body(13, color: _c.text)),
-              backgroundColor: _c.card,
+              backgroundColor: _c.card2,
             ),
           );
           setState(() => _loading = false);
+          _processingScan = false;
+          if (widget.isActive) _startCamera();
         }
         return;
       }
@@ -114,23 +172,20 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
           _shoe             = ShoeModel.fromFirestore(doc);
           _scanned          = true;
           _loading          = false;
+          _scanStartTime    = DateTime.now();
           _soleCondition    = null;
           _fabricCondition  = null;
           _wearLevel        = null;
           _structural       = null;
-          _estimatedAge     = 'Under 1 Year';
           _cleaningReq      = false;
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        _processingScan = false;
+      }
     }
-  }
-
-  void _demoScan() {
-    final suid = _demoSuids[_demoIndex % _demoSuids.length];
-    _demoIndex++;
-    _fetchShoe(suid);
   }
 
   void _openManualEntry() {
@@ -139,6 +194,9 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: _c.card,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: _c.border)),
         title: Text('Enter Shoe ID', style: _heading(20, color: _c.text)),
         content: TextField(
           controller: ctrl,
@@ -149,8 +207,8 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
             hintStyle: _body(14, color: _c.sub),
             enabledBorder: OutlineInputBorder(
                 borderSide: BorderSide(color: _c.border)),
-            focusedBorder: const OutlineInputBorder(
-                borderSide: BorderSide(color: _lime, width: 2)),
+            focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: _c.text, width: 2)),
             filled: true,
             fillColor: _c.bg,
           ),
@@ -164,11 +222,12 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
             onPressed: () {
               Navigator.pop(context);
               if (ctrl.text.trim().isNotEmpty) {
+                _processingScan = true;
                 _fetchShoe(ctrl.text.trim());
               }
             },
             child: Text('Fetch',
-                style: _body(14, color: _lime)
+                style: _body(14, color: _c.accent)
                     .copyWith(fontWeight: FontWeight.w700)),
           ),
         ],
@@ -184,9 +243,10 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
       _fabricCondition = null;
       _wearLevel       = null;
       _structural      = null;
-      _estimatedAge    = 'Under 1 Year';
       _cleaningReq     = false;
     });
+    _processingScan = false;
+    if (widget.isActive) _startCamera();
   }
 
   void _runRouting() {
@@ -198,30 +258,80 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
       fabricCondition:     _fabricCondition!.toFabricCondition(),
       wearLevel:           _wearLevel!.toWearLevel(),
       structuralIntegrity: _structural!.toStructuralIntegrity(),
-      estimatedAge:        _estimatedAge.toEstimatedAge(),
       cleaningRequired:    _cleaningReq,
     );
 
     FirebaseFirestore.instance
         .collection('Shoes')
         .doc(_shoe!.suid)
-        .update({'RTE-DCN': result.decision, 'LCS-STS': 'ROUTED.'});
+        .update({'RTE-DCN': result.routingInstruction, 'LCS-STS': 'ROUTED.'});
+
+    _recordScanStats(result.routingInstruction);
+    _recordHubThroughput(result.routingInstruction);
+
+    setState(() {
+      _lastRoutedName        = _shoe!.snm;
+      _lastRoutedInstruction = result.routingInstruction;
+    });
 
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (_, a, __) =>
-            HubResultScreen(shoe: _shoe!, result: result),
-        transitionsBuilder: (_, anim, __, child) => FadeTransition(
-          opacity: anim,
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.95, end: 1.0).animate(anim),
-            child: child,
-          ),
-        ),
-        transitionDuration: const Duration(milliseconds: 400),
+        pageBuilder: (_, __, ___) => HubResultScreen(result: result),
+        transitionsBuilder: (_, anim, __, child) =>
+            FadeTransition(opacity: anim, child: child),
+        transitionDuration: const Duration(milliseconds: 250),
       ),
     ).then((_) => _reset());
+  }
+
+  // INS-SCN/INS-TTM are the permanent lifetime totals (Profile). INS-SHF-*
+  // are the current-shift totals (nav drawer) — reset to zero on sign out,
+  // see resetInspectorShiftStats(). INS-OUT-* are lifetime per-outcome
+  // counts feeding the Profile breakdown.
+  void _recordScanStats(String routingInstruction) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || _scanStartTime == null) return;
+    final elapsedSeconds =
+        DateTime.now().difference(_scanStartTime!).inMilliseconds / 1000.0;
+    FirebaseFirestore.instance.collection('users').doc(uid).update({
+      'INS-SCN':     FieldValue.increment(1),
+      'INS-TTM':     FieldValue.increment(elapsedSeconds),
+      'INS-SHF-SCN': FieldValue.increment(1),
+      'INS-SHF-TTM': FieldValue.increment(elapsedSeconds),
+      _outcomeField(routingInstruction): FieldValue.increment(1),
+    });
+  }
+
+  // Feeds the HQ Admin Dashboard's live Europe view — the only hub in the
+  // system today is Berlin (HUB-001), same hub the chatbot and inspector
+  // profile screen already hardcode. HUB-TSP is the running shoes-processed
+  // count for the hub; RTE-LOG is the per-scan detail (decision + CO2 +
+  // timestamp) the dashboard sums/buckets by month to build its live charts.
+  void _recordHubThroughput(String routingInstruction) {
+    if (_shoe == null) return;
+    FirebaseFirestore.instance.collection('hubs').doc('HUB-001').update({
+      'HUB-TSP': FieldValue.increment(1),
+      'RTE-LOG': FieldValue.arrayUnion([
+        {
+          'SUID':    _shoe!.suid,
+          'RTE-DCN': routingInstruction,
+          'ECO-CO2': _shoe!.ecoCo2,
+          'TS':      Timestamp.fromDate(DateTime.now()),
+        }
+      ]),
+    });
+  }
+
+  static String _outcomeField(String routingInstruction) {
+    switch (routingInstruction) {
+      case 'To resale.':          return 'INS-OUT-RSL';
+      case 'To cleaning.':        return 'INS-OUT-CLN';
+      case 'To fabric rework.':   return 'INS-OUT-FAB';
+      case 'To sole rework.':     return 'INS-OUT-SOL';
+      case 'To full recycle.':    return 'INS-OUT-RCY';
+      default:                    return 'INS-OUT-RSL';
+    }
   }
 
   bool get _canRoute =>
@@ -231,13 +341,15 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
       _wearLevel       != null &&
       _structural      != null;
 
-  void _signOut() async {
+  void _punchOut() async {
+    await resetInspectorShiftStats();
     await FirebaseAuth.instance.signOut();
+    // Pop back to _AuthGate (the first route) instead of pushing a new
+    // LoginScreen — pushAndRemoveUntil(..., (route) => false) would evict
+    // _AuthGate itself, permanently breaking reactive auth routing for the
+    // rest of the session.
     if (mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-        (route) => false,
-      );
+      Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
 
@@ -246,7 +358,25 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: _c.bg,
+      endDrawer: NavDrawer(
+        c: _c,
+        chatPersona: ChatPersona.inspector,
+        onSignOut: _punchOut,
+        signOutLabel: 'Punch Out',
+        themeNotifier: inspectorDarkMode,
+        extra: InspectorStatsRow(c: _c),
+        items: [
+          NavDrawerItem(icon: Icons.qr_code_scanner, label: 'Inspect', selected: true,
+              onTap: () => Navigator.of(context).pop()),
+          NavDrawerItem(icon: Icons.person, label: 'Profile',
+              onTap: () {
+                Navigator.of(context).pop();
+                widget.onNavSelect?.call(1);
+              }),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -265,7 +395,6 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      color: _c.card,
       child: Row(
         children: [
           if (_scanned)
@@ -277,182 +406,258 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
             const SizedBox(width: 20),
           const SizedBox(width: 8),
           Expanded(
-            child: Text('Scan Mode', style: _heading(20, color: _c.text)),
+            child: Text('INSPECT.', style: _heading(20, color: _c.text)),
           ),
-          Icon(Icons.qr_code_scanner, color: _lime, size: 24),
-          const SizedBox(width: 4),
-          IconButton(
-            icon: Icon(Icons.logout, color: _c.sub, size: 20),
-            onPressed: _signOut,
-            tooltip: 'Sign Out',
+          CircleIconButton(
+            icon: Icons.menu_rounded,
+            c: _c,
+            onTap: () => _scaffoldKey.currentState?.openEndDrawer(),
           ),
         ],
       ),
     );
   }
 
-  // ── Scan panel ────────────────────────────────────────────────────────────
+  // ── Scan panel — split console: live camera + "Last Routed" console ───────
 
   Widget _buildScanPanel() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text('Scan The Label.', style: _heading(38, color: _c.text))
-            .animate()
-            .fadeIn(duration: 400.ms),
-        const SizedBox(height: 32),
-        _buildWebViewfinder(),
-        const SizedBox(height: 20),
-        GestureDetector(
-          onTap: _openManualEntry,
-          child: Text(
-            'Enter SUID manually',
-            style: _body(13, color: _lime)
-                .copyWith(decoration: TextDecoration.underline),
-          ),
-        ).animate().fadeIn(delay: 400.ms),
-        if (_loading) ...[
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      child: Column(
+        children: [
+          _buildCameraCard().animate().fadeIn(duration: 300.ms),
           const SizedBox(height: 16),
-          const CircularProgressIndicator(color: _lime),
+          GestureDetector(
+            onTap: _openManualEntry,
+            child: Text(
+              'Enter SUID manually',
+              style: _body(13, color: _c.accent)
+                  .copyWith(decoration: TextDecoration.underline),
+            ),
+          ).animate().fadeIn(delay: 200.ms),
+          if (_loading) ...[
+            const SizedBox(height: 16),
+            CircularProgressIndicator(color: _c.accent),
+          ],
+          const SizedBox(height: 16),
+          _buildLastRoutedCard().animate().fadeIn(delay: 250.ms),
         ],
+      ),
+    );
+  }
+
+  // Same 260x260 scanner box as the Customer screen — just Inspector's
+  // monochrome palette instead of dark+lime.
+  Widget _buildCameraCard() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 260,
+          height: 260,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Stack(
+              children: [
+                _cameraError
+                    ? _buildCameraError()
+                    : MobileScanner(
+                        controller: _scanner,
+                        fit: BoxFit.cover,
+                        onDetect: _onDetect,
+                        errorBuilder: (context, error, child) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) setState(() => _cameraError = true);
+                          });
+                          return _buildCameraError();
+                        },
+                      ),
+                IgnorePointer(child: Stack(children: _corners())),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Scanning...',
+          style: _body(12, color: _c.text).copyWith(fontWeight: FontWeight.w700),
+        ),
       ],
     );
   }
 
-  Widget _buildWebViewfinder() {
-    return GestureDetector(
-      onTap: _demoScan,
-      child: _AnimatedViewfinder(
-          scanLineAnim: _scanLineAnim, loading: _loading),
-    ).animate().fadeIn(delay: 200.ms);
-  }
-
-  // ── Inspection panel ──────────────────────────────────────────────────────
-
-  Widget _buildInspectionPanel() {
-    final shoe = _shoe!;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+  Widget _buildCameraError() {
+    return Container(
+      color: _c.card,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          _buildShoeCard(shoe)
-              .animate()
-              .slideY(begin: 0.3, end: 0, duration: 400.ms)
-              .fadeIn(duration: 400.ms),
-          const SizedBox(height: 16),
-          _buildMaterialBreakdown(shoe)
-              .animate()
-              .fadeIn(delay: 100.ms, duration: 400.ms),
-          const SizedBox(height: 16),
-          _buildConditionSelector(
-            title:    'Check The Sole',
-            pills:    const ['Fresh', 'Worn', 'Done.'],
-            selected: _soleCondition,
-            onSelect: (v) => setState(() => _soleCondition = v),
-          ).animate().fadeIn(delay: 150.ms, duration: 400.ms),
-          const SizedBox(height: 14),
-          _buildConditionSelector(
-            title:    'Check The Fabric',
-            pills:    const ['Fresh', 'Worn', 'Done.'],
-            selected: _fabricCondition,
-            onSelect: (v) => setState(() => _fabricCondition = v),
-          ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
-          const SizedBox(height: 14),
-          _buildConditionSelector(
-            title:    'Overall Wear Level',
-            pills:    const ['Light', 'Moderate', 'Heavy'],
-            selected: _wearLevel,
-            onSelect: (v) => setState(() => _wearLevel = v),
-          ).animate().fadeIn(delay: 250.ms, duration: 400.ms),
-          const SizedBox(height: 14),
-          _buildConditionSelector(
-            title:    'Structural Integrity',
-            pills:    const ['Intact', 'Minor Damage', 'Major Damage'],
-            selected: _structural,
-            onSelect: (v) => setState(() => _structural = v),
-          ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
-          const SizedBox(height: 14),
-          _buildAgeDropdown()
-              .animate()
-              .fadeIn(delay: 350.ms, duration: 400.ms),
-          const SizedBox(height: 14),
-          _buildCleaningToggle()
-              .animate()
-              .fadeIn(delay: 400.ms, duration: 400.ms),
-          const SizedBox(height: 24),
-          _buildRouteButton()
-              .animate()
-              .fadeIn(delay: 450.ms, duration: 400.ms)
-              .slideY(begin: 0.2, end: 0, duration: 400.ms),
+          Icon(Icons.camera_alt_outlined, color: _c.sub, size: 40),
+          const SizedBox(height: 10),
+          Text('Camera unavailable.',
+              style: _body(13, color: _c.sub), textAlign: TextAlign.center),
+          const SizedBox(height: 4),
+          Text('Allow camera access\nor use manual entry below.',
+              style: _body(11, color: _c.sub.withOpacity(0.7)),
+              textAlign: TextAlign.center),
         ],
       ),
     );
   }
 
-  Widget _buildShoeCard(ShoeModel shoe) {
+  List<Widget> _corners() {
+    Widget corner(Alignment align, bool flipX, bool flipY) {
+      return Align(
+        alignment: align,
+        child: Transform(
+          alignment: Alignment.center,
+          transform: Matrix4.identity()
+            ..scale(flipX ? -1.0 : 1.0, flipY ? -1.0 : 1.0),
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CustomPaint(
+              painter: _CornerPainter(color: _c.text, strokeWidth: 3.5, radius: 4),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return [
+      corner(Alignment.topLeft,     false, false),
+      corner(Alignment.topRight,    true,  false),
+      corner(Alignment.bottomLeft,  false, true),
+      corner(Alignment.bottomRight, true,  true),
+    ];
+  }
+
+  Widget _buildLastRoutedCard() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: _c.card,
-        borderRadius: const BorderRadius.all(Radius.circular(14)),
-        border: const Border(left: BorderSide(color: _lime, width: 3)),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _c.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('LAST ROUTED', style: _body(11, color: _c.sub).copyWith(letterSpacing: 1)),
+          const SizedBox(height: 6),
+          if (_lastRoutedName == null)
+            Text('Nothing scanned yet this session.',
+                style: _body(13, color: _c.sub))
+          else ...[
+            Text(_lastRoutedName!,
+                style: _body(14, color: _c.text).copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: _emphasisDecoration(radius: 20),
+              child: Text(_lastRoutedInstruction!.toUpperCase(),
+                  style: _body(11, color: _emphasisTextColor)
+                      .copyWith(fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ── Inspection panel — persistent shoe strip ───────────────────────────────
+
+  Widget _buildInspectionPanel() {
+    final shoe = _shoe!;
+    return Column(
+      children: [
+        _buildShoeStrip(shoe)
+            .animate()
+            .fadeIn(duration: 300.ms),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildMaterialBreakdown(shoe)
+                    .animate()
+                    .fadeIn(delay: 50.ms, duration: 300.ms),
+                const SizedBox(height: 16),
+                _buildConditionSelector(
+                  title:    'Sole',
+                  pills:    const ['Fresh', 'Worn', 'Damaged'],
+                  selected: _soleCondition,
+                  onSelect: (v) => setState(() => _soleCondition = v),
+                ).animate().fadeIn(delay: 100.ms, duration: 300.ms),
+                const SizedBox(height: 14),
+                _buildConditionSelector(
+                  title:    'Fabric',
+                  pills:    const ['Fresh', 'Worn', 'Damaged'],
+                  selected: _fabricCondition,
+                  onSelect: (v) => setState(() => _fabricCondition = v),
+                ).animate().fadeIn(delay: 150.ms, duration: 300.ms),
+                const SizedBox(height: 14),
+                _buildConditionSelector(
+                  title:    'Wear Level',
+                  pills:    const ['Light', 'Moderate', 'Heavy'],
+                  selected: _wearLevel,
+                  onSelect: (v) => setState(() => _wearLevel = v),
+                ).animate().fadeIn(delay: 200.ms, duration: 300.ms),
+                const SizedBox(height: 14),
+                _buildConditionSelector(
+                  title:    'Structural Integrity',
+                  pills:    const ['Intact', 'Minor Damage', 'Major Damage'],
+                  selected: _structural,
+                  onSelect: (v) => setState(() => _structural = v),
+                ).animate().fadeIn(delay: 250.ms, duration: 300.ms),
+                const SizedBox(height: 14),
+                _buildCleaningToggle()
+                    .animate()
+                    .fadeIn(delay: 300.ms, duration: 300.ms),
+                const SizedBox(height: 24),
+                _buildRouteButton()
+                    .animate()
+                    .fadeIn(delay: 350.ms, duration: 300.ms),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildShoeStrip(ShoeModel shoe) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: _c.card,
+        border: Border(bottom: BorderSide(color: _c.border)),
       ),
       child: Row(
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
             child: SizedBox(
-              width: 80,
-              height: 60,
+              width: 44,
+              height: 34,
               child: shoe.snmImg.isNotEmpty
                   ? Image.network(shoe.snmImg, fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) =>
-                          Container(
-                              color: _c.card2,
-                              child: Center(
-                                child: Text('NIKE',
-                                    style: GoogleFonts.bebasNeue(
-                                      fontSize: 18,
-                                      color: _lime.withOpacity(0.2),
-                                      letterSpacing: 4,
-                                    )),
-                              )))
-                  : Container(
-                      color: _c.card2,
-                      child: Center(
-                        child: Text('NIKE',
-                            style: GoogleFonts.bebasNeue(
-                              fontSize: 18,
-                              color: _lime.withOpacity(0.2),
-                              letterSpacing: 4,
-                            )),
-                      ),
-                    ),
+                      errorBuilder: (_, __, ___) => Container(color: _c.card2))
+                  : Container(color: _c.card2),
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(shoe.snm,
-                    maxLines: 2,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: _body(14, color: _c.text)
-                        .copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: _lime,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text('Verified.',
-                      style: _body(11, color: _black)
-                          .copyWith(fontWeight: FontWeight.w700)),
-                ),
+                    style: _body(13, color: _c.text).copyWith(fontWeight: FontWeight.w700)),
+                Text(shoe.suid, style: _body(11, color: _c.sub)),
               ],
             ),
           ),
@@ -474,7 +679,8 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: _c.card,
-        borderRadius: const BorderRadius.all(Radius.circular(14)),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _c.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -489,14 +695,14 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
                       width: 12,
                       height: 12,
                       decoration: BoxDecoration(
-                        color: colors[e.key] ?? _lime,
+                        color: colors[e.key] ?? _c.accent,
                         borderRadius: BorderRadius.circular(3),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(child: Text(e.key, style: _body(14, color: _c.text))),
                     Text('${e.value.toInt()}%',
-                        style: _body(14, color: _lime)
+                        style: _body(14, color: _c.accent)
                             .copyWith(fontWeight: FontWeight.w700)),
                   ],
                 ),
@@ -518,9 +724,10 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
       decoration: BoxDecoration(
         color: _c.card,
         borderRadius: BorderRadius.circular(14),
-        border: selected != null
-            ? const Border(left: BorderSide(color: _lime, width: 3))
-            : Border.all(color: _c.border, width: 0.5),
+        border: Border.all(
+          color: selected != null ? _c.text : _c.border,
+          width: selected != null ? 1.5 : 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -533,38 +740,26 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
               return Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 3),
-                  child: AnimatedScale(
-                    scale: isSelected ? 1.05 : 1.0,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.elasticOut,
-                    child: GestureDetector(
-                      onTap: () {
-                        onSelect(pill);
-                        setState(() {
-                          _pillTapCount[pill] =
-                              (_pillTapCount[pill] ?? 0) + 1;
-                        });
-                      },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: isSelected ? _lime : Colors.transparent,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: isSelected ? _lime : _c.border,
-                          ),
-                        ),
-                        child: Text(
-                          pill,
-                          textAlign: TextAlign.center,
-                          style: _body(13,
-                                  color: isSelected ? _black : _c.text)
-                              .copyWith(
-                                  fontWeight: isSelected
-                                      ? FontWeight.w700
-                                      : FontWeight.w400),
-                        ),
+                  child: GestureDetector(
+                    onTap: () => onSelect(pill),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: isSelected
+                          ? _emphasisDecoration()
+                          : BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: _c.border),
+                            ),
+                      child: Text(
+                        pill,
+                        textAlign: TextAlign.center,
+                        style: _body(13,
+                                color: isSelected ? _emphasisTextColor : _c.text)
+                            .copyWith(
+                                fontWeight: isSelected
+                                    ? FontWeight.w700
+                                    : FontWeight.w400),
                       ),
                     ),
                   ),
@@ -577,89 +772,13 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
     );
   }
 
-  Widget _buildAgeDropdown() {
-    const options = [
-      'Under 1 Year',
-      '1–2 Years',
-      '2–3 Years',
-      'Over 3 Years',
-    ];
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _c.card,
-        borderRadius: const BorderRadius.all(Radius.circular(14)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Estimated Age', style: _heading(18, color: _c.text)),
-          const SizedBox(height: 14),
-          DropdownButtonFormField<String>(
-            value: _estimatedAge,
-            dropdownColor: _c.card,
-            style: _body(14, color: _c.text),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: _c.bg,
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 12),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: _c.border),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: _c.border),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _lime, width: 2),
-              ),
-            ),
-            items: options
-                .map((o) => DropdownMenuItem(
-                      value: o,
-                      child: Text(o, style: _body(14, color: _c.text)),
-                    ))
-                .toList(),
-            onChanged: (v) {
-              if (v != null) setState(() => _estimatedAge = v);
-            },
-            icon: const Icon(Icons.keyboard_arrow_down, color: _lime),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              const Icon(Icons.stars, color: _lime, size: 16),
-              const SizedBox(width: 6),
-              Text(
-                '${_coinPreview(_estimatedAge)} NikeCoins for this age',
-                style: _body(12, color: _lime),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  int _coinPreview(String age) {
-    switch (age) {
-      case 'Under 1 Year': return 150;
-      case '1–2 Years':    return 120;
-      case '2–3 Years':    return 80;
-      default:             return 50;
-    }
-  }
-
   Widget _buildCleaningToggle() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: _c.card,
-        borderRadius: const BorderRadius.all(Radius.circular(14)),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _c.border),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -670,13 +789,13 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
               Text(
                 _cleaningReq ? 'Yes' : 'No',
                 style: _body(14,
-                    color: _cleaningReq ? _lime : _c.sub),
+                    color: _cleaningReq ? _c.accent : _c.sub),
               ),
               const SizedBox(width: 10),
               Switch(
                 value: _cleaningReq,
                 onChanged: (v) => setState(() => _cleaningReq = v),
-                activeColor: _lime,
+                activeColor: _c.text,
                 inactiveThumbColor: _c.sub,
                 inactiveTrackColor: _c.card2,
               ),
@@ -690,134 +809,32 @@ class _HubInspectorScreenState extends State<HubInspectorScreen>
   Widget _buildRouteButton() {
     return SizedBox(
       width: double.infinity,
-      child: ElevatedButton(
-        onPressed: _canRoute ? _runRouting : null,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: _canRoute ? _lime : _c.card2,
-          foregroundColor: _black,
+      child: GestureDetector(
+        onTap: _canRoute ? _runRouting : null,
+        child: Container(
           padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-          elevation: 0,
-        ),
-        child: Text(
-          'Route It.',
-          style: _body(16, color: _canRoute ? _black : _c.sub)
-              .copyWith(fontWeight: FontWeight.w900, letterSpacing: 0.5),
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Animated viewfinder widget (web / demo mode)
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _AnimatedViewfinder extends StatelessWidget {
-  final Animation<double> scanLineAnim;
-  final bool              loading;
-
-  const _AnimatedViewfinder({
-    required this.scanLineAnim,
-    required this.loading,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 240,
-      height: 240,
-      child: Stack(
-        children: [
-          // Viewfinder always has dark background for QR scan readability
-          Container(color: Colors.black.withOpacity(0.85)),
-          ..._corners(),
-          AnimatedBuilder(
-            animation: scanLineAnim,
-            builder: (_, __) => Positioned(
-              top: scanLineAnim.value * 220,
-              left: 8,
-              right: 8,
-              child: Container(
-                height: 2,
-                decoration: BoxDecoration(
-                  color: _lime,
-                  boxShadow: [
-                    BoxShadow(
-                      color: _lime.withOpacity(0.9),
-                      blurRadius: 6,
-                      spreadRadius: 1,
-                    ),
-                    BoxShadow(
-                      color: _lime.withOpacity(0.5),
-                      blurRadius: 16,
-                      spreadRadius: 6,
-                    ),
-                    BoxShadow(
-                      color: _lime.withOpacity(0.2),
-                      blurRadius: 32,
-                      spreadRadius: 10,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          if (loading)
-            const Center(
-              child: CircularProgressIndicator(color: _lime),
-            ),
-          if (!loading)
-            Center(
-              child: Text(
-                'TAP TO SCAN',
-                style: GoogleFonts.bebasNeue(
-                  fontSize: 14,
-                  color: _lime.withOpacity(0.6),
-                  letterSpacing: 3,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _corners() {
-    Widget corner(Alignment align, bool flipX, bool flipY) {
-      return Align(
-        alignment: align,
-        child: Transform(
           alignment: Alignment.center,
-          transform: Matrix4.identity()
-            ..scale(flipX ? -1.0 : 1.0, flipY ? -1.0 : 1.0),
-          child: SizedBox(
-            width: 24,
-            height: 24,
-            child: CustomPaint(
-              painter: _CornerPainter(
-                color: _lime,
-                strokeWidth: 3,
-                radius: 4,
-              ),
-            ),
+          decoration: _canRoute
+              ? _emphasisDecoration(radius: 12, borderWidth: 1.5)
+              : BoxDecoration(
+                  color: _c.card2,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _c.border),
+                ),
+          child: Text(
+            'Route It.',
+            style: _body(16, color: _canRoute ? _emphasisTextColor : _c.sub)
+                .copyWith(fontWeight: FontWeight.w900, letterSpacing: 0.5),
           ),
         ),
-      );
-    }
-
-    return [
-      corner(Alignment.topLeft,     false, false),
-      corner(Alignment.topRight,    true,  false),
-      corner(Alignment.bottomLeft,  false, true),
-      corner(Alignment.bottomRight, true,  true),
-    ];
+      ),
+    );
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Corner bracket painter
+// Corner bracket painter — used to overlay scan-frame corners on the live
+// camera feed.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _CornerPainter extends CustomPainter {

@@ -6,7 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../models/shoe_model.dart';
 import '../nike_colors.dart';
-import '../theme_notifier.dart';
+import '../services/chatbot_service.dart';
+import '../widgets/nav_controls.dart';
 import 'customer_locker_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -19,7 +20,7 @@ const _black = Color(0xFF111111);
 // Tier system
 // ─────────────────────────────────────────────────────────────────────────────
 const _kEliteThreshold = 600;
-const _kResetCoins     = 120;
+const _kResetCoins     = 0;
 
 class _Tier {
   final String   label;
@@ -75,13 +76,22 @@ class _ProfileData {
 // ─────────────────────────────────────────────────────────────────────────────
 class CustomerProfileScreen extends StatefulWidget {
   final VoidCallback onScanTap;
-  const CustomerProfileScreen({super.key, required this.onScanTap});
+  final VoidCallback? onHomeTap;
+  final ValueChanged<int>? onNavSelect;
+  const CustomerProfileScreen({
+    super.key,
+    required this.onScanTap,
+    this.onHomeTap,
+    this.onNavSelect,
+  });
 
   @override
   State<CustomerProfileScreen> createState() => _CustomerProfileScreenState();
 }
 
 class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+
   late Future<_ProfileData> _future;
   bool _claiming       = false;
   int? _selectedProduct;
@@ -105,23 +115,23 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
         .get();
     final userData = userDoc.data() ?? {};
 
-    final suidLnk = List<String>.from(userData['SUID-LNK'] ?? []);
-    List<ShoeModel> shoes = [];
+    final seen  = <String>{};
+    final shoes = <ShoeModel>[];
 
-    if (suidLnk.isNotEmpty) {
-      final snap = await FirebaseFirestore.instance
-          .collection('Shoes')
-          .where(FieldPath.documentId, whereIn: suidLnk)
-          .get();
-      shoes = snap.docs.map((d) => ShoeModel.fromFirestore(d)).toList();
+    final linkedIds = userData['SUID-LNK'] as List<dynamic>? ?? [];
+    for (final id in linkedIds) {
+      final suid = id as String;
+      if (seen.contains(suid)) continue;
+      final doc = await FirebaseFirestore.instance
+          .collection('Shoes').doc(suid).get();
+      if (doc.exists) { shoes.add(ShoeModel.fromFirestore(doc)); seen.add(suid); }
     }
 
-    if (shoes.isEmpty) {
-      final snap = await FirebaseFirestore.instance
-          .collection('Shoes')
-          .where('CUID-LNK', isEqualTo: uid)
-          .get();
-      shoes = snap.docs.map((d) => ShoeModel.fromFirestore(d)).toList();
+    final byLink = await FirebaseFirestore.instance
+        .collection('Shoes').where('CUID-LNK', isEqualTo: uid).get();
+    for (final d in byLink.docs) {
+      final shoe = ShoeModel.fromFirestore(d);
+      if (!seen.contains(shoe.suid)) { shoes.add(shoe); seen.add(shoe.suid); }
     }
 
     return _ProfileData(userData: userData, shoes: shoes);
@@ -143,6 +153,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
         setState(() {
           _claiming        = false;
           _selectedProduct = null;
+          _demoCoins       = null;
           _future          = _loadData();
         });
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -203,19 +214,58 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
   Widget build(BuildContext context) {
     final c = _c;
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: c.bg,
-      body: SafeArea(
-        child: FutureBuilder<_ProfileData>(
-          future: _future,
-          builder: (context, snap) {
-            if (!snap.hasData) {
-              return const Center(
-                child: CircularProgressIndicator(color: _lime, strokeWidth: 2),
-              );
-            }
-            return _buildContent(snap.data!, c);
-          },
-        ),
+      endDrawer: NavDrawer(
+        c: c,
+        chatPersona: ChatPersona.customer,
+        onSignOut: () => FirebaseAuth.instance.signOut(),
+        items: [
+          NavDrawerItem(icon: Icons.home, label: 'Home',
+              onTap: () { Navigator.of(context).pop(); widget.onHomeTap?.call(); }),
+          NavDrawerItem(icon: Icons.qr_code, label: 'Scan',
+              onTap: () {
+                Navigator.of(context).pop();
+                widget.onNavSelect?.call(1);
+              }),
+          NavDrawerItem(icon: Icons.person, label: 'Profile', selected: true,
+              onTap: () => Navigator.of(context).pop()),
+        ],
+      ),
+      body: Stack(
+        children: [
+          SafeArea(
+            child: FutureBuilder<_ProfileData>(
+              future: _future,
+              builder: (context, snap) {
+                if (!snap.hasData) {
+                  return const Center(
+                    child: CircularProgressIndicator(color: _lime, strokeWidth: 2),
+                  );
+                }
+                return _buildContent(snap.data!, c);
+              },
+            ),
+          ),
+          SafeArea(child: _buildHeaderBar(c)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderBar(NikeColors c) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          CircleIconButton(icon: Icons.arrow_back, c: c, onTap: widget.onHomeTap),
+          CircleIconButton(
+            icon: Icons.menu_rounded,
+            c: c,
+            onTap: () => _scaffoldKey.currentState?.openEndDrawer(),
+          ),
+        ],
       ),
     );
   }
@@ -237,16 +287,14 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(24, 40, 24, 110),
+      padding: const EdgeInsets.fromLTRB(24, 40, 24, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
 
           _buildAvatar(initials, name, email, c),
           const SizedBox(height: 36),
-          _buildCoinsSection(coins, c),
-          const SizedBox(height: 20),
-          _buildTierCard(coins, c),
+          _buildTierRingCard(coins, c),
 
           if (coins >= _kEliteThreshold) ...[
             const SizedBox(height: 16),
@@ -254,14 +302,12 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
           ],
 
           const SizedBox(height: 24),
-          _buildImpactCard(totalCo2, kmEquiv, returnCount, c),
-          const SizedBox(height: 24),
           _buildBadgesSection(returnCount, data.shoes.length, c),
+          const SizedBox(height: 24),
+          _buildImpactCard(totalCo2, kmEquiv, returnCount, c),
           const SizedBox(height: 24),
           _buildLockerRow(data.shoes.length, c),
           const SizedBox(height: 24),
-          _buildThemeToggle(c),
-          const SizedBox(height: 16),
           _buildSignOut(c),
         ],
       ),
@@ -321,48 +367,19 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     );
   }
 
-  // ── NikeCoins section ──────────────────────────────────────────────────────
+  // ── Tier ring card (coins + tier progress, gamified) ───────────────────────
 
-  Widget _buildCoinsSection(int coins, NikeColors c) {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.stars_rounded, color: _lime, size: 28),
-            const SizedBox(width: 8),
-            Text('$coins',
-                style: GoogleFonts.bebasNeue(
-                    fontSize: 64, color: _lime, letterSpacing: 1.5)),
-          ],
-        )
-            .animate()
-            .fadeIn(delay: 400.ms, duration: 400.ms)
-            .slideY(begin: 0.15, end: 0, delay: 400.ms, duration: 400.ms,
-                curve: Curves.easeOutCubic),
-
-        const SizedBox(height: 4),
-
-        Text('NIKECOINS EARNED',
-            style: GoogleFonts.nunito(
-                fontSize: 12, color: c.sub,
-                letterSpacing: 1.5, fontWeight: FontWeight.w600))
-            .animate()
-            .fadeIn(delay: 480.ms, duration: 350.ms),
-      ],
-    );
-  }
-
-  // ── Tier card ──────────────────────────────────────────────────────────────
-
-  Widget _buildTierCard(int coins, NikeColors c) {
+  Widget _buildTierRingCard(int coins, NikeColors c) {
     final currentTier = _tiers.lastWhere(
         (t) => t.threshold <= coins, orElse: () => _tiers.first);
     final nextIdx  = _tiers.indexOf(currentTier) + 1;
     final nextTier = nextIdx < _tiers.length ? _tiers[nextIdx] : null;
     final coinsToNext = nextTier != null ? nextTier.threshold - coins : 0;
+    final ringProgress = (coins / _kEliteThreshold).clamp(0.0, 1.0);
+    final ringPct = (ringProgress * 100).round();
 
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: c.card,
@@ -370,61 +387,61 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
         border: Border.all(color: c.border),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('CURRENT TIER',
-                      style: GoogleFonts.nunito(
-                          fontSize: 11, color: c.sub,
-                          letterSpacing: 1, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  Row(children: [
-                    Icon(currentTier.icon, color: _lime, size: 18),
-                    const SizedBox(width: 6),
-                    Text(currentTier.label,
-                        style: GoogleFonts.bebasNeue(
-                            fontSize: 22, color: _lime, letterSpacing: 1.5)),
-                  ]),
-                ],
-              ),
-              if (nextTier != null)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('NEXT TIER',
-                        style: GoogleFonts.nunito(
-                            fontSize: 11, color: c.sub,
-                            letterSpacing: 1, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 4),
-                    Row(children: [
-                      Text(nextTier.label,
-                          style: GoogleFonts.bebasNeue(
-                              fontSize: 18, color: c.sub, letterSpacing: 1.5)),
-                      const SizedBox(width: 4),
-                      Icon(nextTier.icon, color: c.sub, size: 16),
-                    ]),
-                  ],
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: _lime.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _lime.withOpacity(0.5)),
+          SizedBox(
+            width: 112, height: 112,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 112, height: 112,
+                  child: CircularProgressIndicator(
+                    value: ringProgress,
+                    strokeWidth: 8,
+                    backgroundColor: c.border,
+                    valueColor: const AlwaysStoppedAnimation(_lime),
                   ),
-                  child: Text('UNLOCKED',
-                      style: GoogleFonts.nunito(
-                          fontSize: 11, color: _lime,
-                          fontWeight: FontWeight.w800, letterSpacing: 0.5)),
                 ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(currentTier.icon, color: _lime, size: 22),
+                    const SizedBox(height: 4),
+                    Text('$ringPct%',
+                        style: GoogleFonts.bebasNeue(
+                            fontSize: 20, color: _lime, letterSpacing: 1)),
+                  ],
+                ),
+              ],
+            ),
+          )
+              .animate()
+              .scale(begin: const Offset(0.7, 0.7), duration: 500.ms,
+                  curve: Curves.elasticOut),
+
+          const SizedBox(height: 14),
+
+          Text(currentTier.label,
+              style: GoogleFonts.bebasNeue(
+                  fontSize: 24, color: c.text, letterSpacing: 1.5))
+              .animate()
+              .fadeIn(delay: 200.ms, duration: 350.ms),
+
+          const SizedBox(height: 6),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.stars_rounded, color: _lime, size: 18),
+              const SizedBox(width: 6),
+              Text('$coins NIKECOINS',
+                  style: GoogleFonts.nunito(
+                      fontSize: 13, color: c.sub,
+                      fontWeight: FontWeight.w700, letterSpacing: 0.5)),
             ],
-          ),
+          )
+              .animate()
+              .fadeIn(delay: 280.ms, duration: 350.ms),
 
           const SizedBox(height: 20),
 
@@ -450,8 +467,8 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       ),
     )
         .animate()
-        .fadeIn(delay: 540.ms, duration: 400.ms)
-        .slideY(begin: 0.1, end: 0, delay: 540.ms, duration: 400.ms,
+        .fadeIn(delay: 400.ms, duration: 400.ms)
+        .slideY(begin: 0.1, end: 0, delay: 400.ms, duration: 400.ms,
             curve: Curves.easeOutCubic);
   }
 
@@ -753,24 +770,24 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
             .animate()
             .fadeIn(delay: 700.ms, duration: 350.ms),
         const SizedBox(height: 12),
-        SizedBox(
-          height: 108,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: badges.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (_, i) {
-              return _BadgeTile(badge: badges[i])
-                  .animate()
-                  .fadeIn(delay: (720 + i * 80).ms, duration: 350.ms)
-                  .scale(
-                    begin: const Offset(0.8, 0.8),
-                    delay: (720 + i * 80).ms,
-                    duration: 400.ms,
-                    curve: Curves.elasticOut,
-                  );
-            },
-          ),
+        GridView.count(
+          crossAxisCount: 4,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 0.85,
+          children: List.generate(badges.length, (i) {
+            return _BadgeTile(badge: badges[i], fill: true)
+                .animate()
+                .fadeIn(delay: (720 + i * 80).ms, duration: 350.ms)
+                .scale(
+                  begin: const Offset(0.8, 0.8),
+                  delay: (720 + i * 80).ms,
+                  duration: 400.ms,
+                  curve: Curves.elasticOut,
+                );
+          }),
         ),
       ],
     );
@@ -829,71 +846,6 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
         .fadeIn(delay: 920.ms, duration: 350.ms)
         .slideY(begin: 0.1, end: 0, delay: 920.ms, duration: 350.ms,
             curve: Curves.easeOutCubic);
-  }
-
-  // ── Appearance toggle ──────────────────────────────────────────────────────
-
-  Widget _buildThemeToggle(NikeColors c) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: isDarkMode,
-      builder: (_, dark, __) => GestureDetector(
-        onTap: () => isDarkMode.value = !isDarkMode.value,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          decoration: BoxDecoration(
-            color: c.card,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: c.border),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-                color: _lime, size: 22,
-              ),
-              const SizedBox(width: 14),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('APPEARANCE',
-                      style: GoogleFonts.nunito(
-                          fontSize: 11, color: c.sub,
-                          letterSpacing: 1, fontWeight: FontWeight.w600)),
-                  Text(dark ? 'Dark Mode' : 'Light Mode',
-                      style: GoogleFonts.nunito(
-                          fontSize: 14, color: c.text,
-                          fontWeight: FontWeight.w700)),
-                ],
-              ),
-              const Spacer(),
-              Container(
-                width: 48, height: 26,
-                decoration: BoxDecoration(
-                  color: dark ? _lime.withOpacity(0.2) : _lime,
-                  borderRadius: BorderRadius.circular(13),
-                  border: Border.all(color: _lime.withOpacity(0.6)),
-                ),
-                child: AnimatedAlign(
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeOutCubic,
-                  alignment: dark ? Alignment.centerLeft : Alignment.centerRight,
-                  child: Container(
-                    width: 20, height: 20,
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: dark ? c.sub : _black,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    )
-        .animate()
-        .fadeIn(delay: 960.ms, duration: 350.ms);
   }
 
   // ── Sign out ───────────────────────────────────────────────────────────────
@@ -962,13 +914,14 @@ class _MilestoneBadge extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 class _BadgeTile extends StatelessWidget {
   final _Badge badge;
-  const _BadgeTile({required this.badge});
+  final bool   fill;
+  const _BadgeTile({required this.badge, this.fill = false});
 
   @override
   Widget build(BuildContext context) {
     final c = context.nc;
     return Container(
-      width: 88,
+      width: fill ? double.infinity : 88,
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       decoration: BoxDecoration(
         color: c.card,

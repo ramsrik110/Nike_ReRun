@@ -6,7 +6,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../models/shoe_model.dart';
 import '../nike_colors.dart';
-import '../theme_notifier.dart';
+import '../services/chatbot_service.dart';
+import '../widgets/chatbot_widget.dart';
+import '../widgets/nav_controls.dart';
 import 'customer_return_confirm_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -14,6 +16,7 @@ import 'customer_return_confirm_screen.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 const _lime  = NikeColors.lime;
 const _black = NikeColors.black;
+const _danger = Color(0xFFE24B4A);
 
 TextStyle _heading(double size, {Color color = const Color(0xFFFFFFFF)}) =>
     GoogleFonts.bebasNeue(fontSize: size, color: color, letterSpacing: 1.5);
@@ -26,14 +29,23 @@ TextStyle _body(double size, {Color color = const Color(0xFFFFFFFF)}) =>
 
 class CustomerLockerScreen extends StatefulWidget {
   final VoidCallback? onScanTap;
+  final ValueChanged<int>? onNavSelect;
+  final String? initialSuid;
 
-  const CustomerLockerScreen({super.key, this.onScanTap});
+  const CustomerLockerScreen({
+    super.key,
+    this.onScanTap,
+    this.onNavSelect,
+    this.initialSuid,
+  });
 
   @override
   State<CustomerLockerScreen> createState() => _CustomerLockerScreenState();
 }
 
 class _CustomerLockerScreenState extends State<CustomerLockerScreen> {
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+
   List<ShoeModel> _shoes   = [];
   bool            _loading = true;
   int             _page    = 0;
@@ -95,7 +107,82 @@ class _CustomerLockerScreenState extends State<CustomerLockerScreen> {
       if (!seen.contains(shoe.suid)) { shoes.add(shoe); seen.add(shoe.suid); }
     }
 
-    if (mounted) setState(() { _shoes = shoes; _loading = false; });
+    if (mounted) {
+      if (shoes.isNotEmpty && _page >= shoes.length) {
+        // A shoe was removed from underneath the current page. The
+        // PageController must be moved to a valid index *before* the
+        // rebuild below hands PageView a shorter itemCount — otherwise
+        // the view tries to lay out the now-missing old page and throws
+        // a RangeError. A postFrameCallback fires one frame too late to
+        // avoid that, so this jump has to happen synchronously here.
+        final lastPage = shoes.length - 1;
+        if (_pageCtrl.hasClients) _pageCtrl.jumpToPage(lastPage);
+        setState(() { _shoes = shoes; _loading = false; _page = lastPage; });
+      } else {
+        setState(() { _shoes = shoes; _loading = false; });
+        if (widget.initialSuid != null) {
+          final index = shoes.indexWhere((s) => s.suid == widget.initialSuid);
+          if (index > 0) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_pageCtrl.hasClients) _pageCtrl.jumpToPage(index);
+            });
+          }
+        }
+      }
+    }
+  }
+
+  Future<void> _confirmDelete(ShoeModel shoe) async {
+    HapticFeedback.mediumImpact();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _c.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: _c.border),
+        ),
+        title: Text('DELETE SHOE?', style: _heading(20, color: _c.text)),
+        content: Text(
+          'This removes "${shoe.snm}" from your locker. This can\'t be undone.',
+          style: _body(14, color: _c.sub),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text('CANCEL',
+                style: _body(14, color: _c.text)
+                    .copyWith(fontWeight: FontWeight.w700)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text('DELETE',
+                style: _body(14, color: _danger)
+                    .copyWith(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) _deleteShoe(shoe);
+  }
+
+  Future<void> _deleteShoe(ShoeModel shoe) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final batch = FirebaseFirestore.instance.batch();
+    batch.update(
+      FirebaseFirestore.instance.collection('users').doc(user.uid),
+      {'SUID-LNK': FieldValue.arrayRemove([shoe.suid])},
+    );
+    batch.update(
+      FirebaseFirestore.instance.collection('Shoes').doc(shoe.suid),
+      {'CUID-LNK': ''},
+    );
+    await batch.commit();
+
+    if (mounted) await _load();
   }
 
   void _goToConfirm(ShoeModel shoe) {
@@ -137,7 +224,9 @@ class _CustomerLockerScreenState extends State<CustomerLockerScreen> {
         }
       },
       child: Scaffold(
+        key: _scaffoldKey,
         backgroundColor: _c.bg,
+        endDrawer: _buildNavDrawer(),
         body: Stack(
           children: [
             PageView.builder(
@@ -147,6 +236,7 @@ class _CustomerLockerScreenState extends State<CustomerLockerScreen> {
               itemBuilder: (_, i) => _ShoeScrollPage(
                 shoe: _shoes[i],
                 onCloseLoop: () => _goToConfirm(_shoes[i]),
+                onDelete: () => _confirmDelete(_shoes[i]),
                 onCollapseChanged: (collapsed) {
                   if (_pageCtrl.page?.round() == i) {
                     _heroCollapsed.value = collapsed;
@@ -167,6 +257,8 @@ class _CustomerLockerScreenState extends State<CustomerLockerScreen> {
               bottom: 110, right: 24,
               child: _buildFab(),
             ),
+
+            const ChatbotWidget(persona: ChatPersona.customer),
           ],
         ),
       ),
@@ -180,17 +272,10 @@ class _CustomerLockerScreenState extends State<CustomerLockerScreen> {
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
       child: Row(
         children: [
-          GestureDetector(
+          CircleIconButton(
+            icon: Icons.arrow_back,
+            c: _c,
             onTap: () { HapticFeedback.lightImpact(); Navigator.of(context).pop(); },
-            child: Container(
-              width: 40, height: 40,
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.55),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: _c.border),
-              ),
-              child: Icon(Icons.arrow_back, color: _c.text, size: 20),
-            ),
           ),
           const SizedBox(width: 14),
 
@@ -229,19 +314,47 @@ class _CustomerLockerScreenState extends State<CustomerLockerScreen> {
             ),
           ),
 
-          if (_shoes.length > 1)
-            ValueListenableBuilder<bool>(
-              valueListenable: _heroCollapsed,
-              builder: (_, collapsed, __) => AnimatedOpacity(
-                opacity: collapsed ? 0.0 : 1.0,
-                duration: const Duration(milliseconds: 250),
-                child: Text('${_page + 1} / ${_shoes.length}',
-                    style: _body(13, color: _c.sub)),
-              ),
-            ),
+          CircleIconButton(
+            icon: Icons.menu_rounded,
+            c: _c,
+            onTap: () {
+              HapticFeedback.lightImpact();
+              _scaffoldKey.currentState?.openEndDrawer();
+            },
+          ),
 
         ],
       ),
+    );
+  }
+
+  // ── Nav drawer ────────────────────────────────────────────────────────────
+
+  Widget _buildNavDrawer() {
+    return NavDrawer(
+      c: _c,
+      chatPersona: ChatPersona.customer,
+      onSignOut: () => FirebaseAuth.instance.signOut(),
+      items: [
+        NavDrawerItem(icon: Icons.home, label: 'Home',
+            onTap: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).popUntil((r) => r.isFirst);
+              widget.onNavSelect?.call(0);
+            }),
+        NavDrawerItem(icon: Icons.qr_code, label: 'Scan',
+            onTap: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).popUntil((r) => r.isFirst);
+              widget.onNavSelect?.call(1);
+            }),
+        NavDrawerItem(icon: Icons.person, label: 'Profile',
+            onTap: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).popUntil((r) => r.isFirst);
+              widget.onNavSelect?.call(2);
+            }),
+      ],
     );
   }
 
@@ -313,17 +426,10 @@ class _CustomerLockerScreenState extends State<CustomerLockerScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: GestureDetector(
+              child: CircleIconButton(
+                icon: Icons.arrow_back,
+                c: _c,
                 onTap: () => Navigator.of(context).pop(),
-                child: Container(
-                  width: 40, height: 40,
-                  decoration: BoxDecoration(
-                    color: _c.card,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _c.border),
-                  ),
-                  child: Icon(Icons.arrow_back, color: _c.text, size: 20),
-                ),
               ),
             ),
             Center(
@@ -414,11 +520,13 @@ class _CustomerLockerScreenState extends State<CustomerLockerScreen> {
 class _ShoeScrollPage extends StatefulWidget {
   final ShoeModel          shoe;
   final VoidCallback       onCloseLoop;
+  final VoidCallback       onDelete;
   final ValueChanged<bool> onCollapseChanged;
 
   const _ShoeScrollPage({
     required this.shoe,
     required this.onCloseLoop,
+    required this.onDelete,
     required this.onCollapseChanged,
   });
 
@@ -459,9 +567,20 @@ class _ShoeScrollPageState extends State<_ShoeScrollPage> {
   double get _scrollOffset =>
       _scrollCtrl.hasClients ? _scrollCtrl.offset.clamp(0.0, double.infinity) : 0.0;
 
+  // Scales up padding/icon/font sizes on wide viewports (desktop/projector)
+  // so content fills the space instead of looking sparse — the app still
+  // renders edge-to-edge, only the content inside grows to match.
+  double get _scale {
+    final w = MediaQuery.sizeOf(context).width;
+    if (w >= 1000) return 1.4;
+    if (w >= 600) return 1.15;
+    return 1.0;
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenH = MediaQuery.of(context).size.height;
+    final s = _scale;
 
     return SingleChildScrollView(
       controller: _scrollCtrl,
@@ -472,18 +591,12 @@ class _ShoeScrollPageState extends State<_ShoeScrollPage> {
           _buildHero(screenH),
           Container(
             color: _c.bg,
-            padding: const EdgeInsets.fromLTRB(24, 28, 24, 160),
+            padding: EdgeInsets.fromLTRB(24 * s, 28 * s, 24 * s, 160 * s),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildMaterials(),
-                if (_hasMfg()) ...[
-                  const SizedBox(height: 28),
-                  _buildManufacturing(),
-                ],
-                const SizedBox(height: 28),
-                _buildImpact(),
-                const SizedBox(height: 36),
+                _buildDetailsSection(),
+                SizedBox(height: 36 * s),
                 _buildCTA(),
               ],
             ),
@@ -594,147 +707,72 @@ class _ShoeScrollPageState extends State<_ShoeScrollPage> {
     );
   }
 
-  // ── Section label ─────────────────────────────────────────────────────────
+  // ── Build + Your Loop (two-column on wide screens, stacked on phone) ───────
 
-  Widget _sectionLabel(String text) => Text(
-        text,
-        style: _body(10, color: _c.sub)
-            .copyWith(fontWeight: FontWeight.w700, letterSpacing: 2.0),
-      );
+  Widget _buildDetailsSection() {
+    final s = _scale;
+    final wide = MediaQuery.sizeOf(context).width >= 700;
 
-  // ── Materials ─────────────────────────────────────────────────────────────
+    final co2Tile = _impactTile(
+        icon: Icons.eco_rounded,
+        value: '${widget.shoe.ecoCo2.toStringAsFixed(1)} kg',
+        label: 'CO₂ saved');
+    final coinsTile = _impactTile(
+        icon: Icons.monetization_on_rounded,
+        value: '${widget.shoe.rwdAmt}',
+        label: 'NikeCoins');
+    final infoPanel = _buildInfoPanel();
 
-  Widget _buildMaterials() {
-    final mats = <String, double>{};
-    if (widget.shoe.mcpFlk > 0) mats['FLYKNIT'] = widget.shoe.mcpFlk;
-    if (widget.shoe.mcpRbr > 0) mats['RUBBER']  = widget.shoe.mcpRbr;
-    if (widget.shoe.mcpFom > 0) mats['FOAM']    = widget.shoe.mcpFom;
-    if (widget.shoe.mcpLth > 0) mats['LEATHER'] = widget.shoe.mcpLth;
-    if (mats.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionLabel('THE BUILD'),
-        const SizedBox(height: 14),
-        Wrap(
-          spacing: 10, runSpacing: 10,
-          children: mats.entries.map((e) => Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-            decoration: BoxDecoration(
-              color: _c.card,
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: _c.border),
+    final content = wide
+        ? IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      Expanded(child: co2Tile),
+                      SizedBox(height: 12 * s),
+                      Expanded(child: coinsTile),
+                    ],
+                  ),
+                ),
+                SizedBox(width: 12 * s),
+                Expanded(child: infoPanel),
+              ],
             ),
-            child: RichText(
-              text: TextSpan(children: [
-                TextSpan(text: e.key,
-                    style: _body(12, color: _c.sub)
-                        .copyWith(fontWeight: FontWeight.w600)),
-                const TextSpan(text: '  '),
-                TextSpan(text: '${e.value.toStringAsFixed(0)}%',
-                    style: _body(12, color: _c.text)
-                        .copyWith(fontWeight: FontWeight.w800)),
-              ]),
-            ),
-          )).toList(),
-        ),
-      ],
-    )
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: co2Tile),
+                  SizedBox(width: 12 * s),
+                  Expanded(child: coinsTile),
+                ],
+              ),
+              SizedBox(height: 20 * s),
+              infoPanel,
+            ],
+          );
+
+    return content
         .animate()
         .fadeIn(delay: 100.ms, duration: 400.ms)
         .slideY(begin: 0.08, end: 0, delay: 100.ms, duration: 400.ms,
             curve: Curves.easeOutCubic);
   }
 
-  bool _hasMfg() =>
-      widget.shoe.mfgCtr.isNotEmpty || widget.shoe.mfgNrg.isNotEmpty;
-
-  // ── Manufacturing ─────────────────────────────────────────────────────────
-
-  Widget _buildManufacturing() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionLabel('MADE IN'),
-        const SizedBox(height: 14),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          decoration: BoxDecoration(
-            color: _c.card,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _c.border),
-          ),
-          child: Row(
-            children: [
-              if (widget.shoe.mfgCtr.isNotEmpty) ...[
-                const Icon(Icons.public, color: _lime, size: 16),
-                const SizedBox(width: 8),
-                Text(widget.shoe.mfgCtr,
-                    style: _body(14, color: _c.text)
-                        .copyWith(fontWeight: FontWeight.w700)),
-              ],
-              if (widget.shoe.mfgCtr.isNotEmpty && widget.shoe.mfgNrg.isNotEmpty)
-                Container(margin: const EdgeInsets.symmetric(horizontal: 14),
-                    width: 1, height: 18, color: _c.border),
-              if (widget.shoe.mfgNrg.isNotEmpty) ...[
-                const Icon(Icons.bolt, color: _lime, size: 16),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(widget.shoe.mfgNrg,
-                      style: _body(14, color: _c.text)
-                          .copyWith(fontWeight: FontWeight.w700),
-                      overflow: TextOverflow.ellipsis),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    )
-        .animate()
-        .fadeIn(delay: 180.ms, duration: 400.ms)
-        .slideY(begin: 0.08, end: 0, delay: 180.ms, duration: 400.ms,
-            curve: Curves.easeOutCubic);
-  }
-
-  // ── Impact ────────────────────────────────────────────────────────────────
-
-  Widget _buildImpact() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionLabel('YOUR LOOP'),
-        const SizedBox(height: 14),
-        Row(
-          children: [
-            Expanded(child: _impactTile(
-                emoji: '🌿',
-                value: '${widget.shoe.ecoCo2.toStringAsFixed(1)} kg',
-                label: 'CO₂ saved')),
-            const SizedBox(width: 12),
-            Expanded(child: _impactTile(
-                emoji: '💰',
-                value: '120',
-                label: 'NikeCoins')),
-          ],
-        ),
-      ],
-    )
-        .animate()
-        .fadeIn(delay: 260.ms, duration: 400.ms)
-        .slideY(begin: 0.08, end: 0, delay: 260.ms, duration: 400.ms,
-            curve: Curves.easeOutCubic);
-  }
-
   Widget _impactTile({
-    required String emoji,
+    required IconData icon,
     required String value,
     required String label,
   }) {
+    final s = _scale;
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+      width: double.infinity,
+      padding: EdgeInsets.all(20 * s),
       decoration: BoxDecoration(
         color: _lime.withOpacity(0.07),
         borderRadius: BorderRadius.circular(14),
@@ -742,50 +780,168 @@ class _ShoeScrollPageState extends State<_ShoeScrollPage> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(emoji, style: const TextStyle(fontSize: 22)),
-          const SizedBox(height: 8),
-          Text(value, style: _heading(28, color: _lime)),
+          Icon(icon, color: _lime, size: 26 * s),
+          SizedBox(height: 10 * s),
+          Text(value, style: _heading(32 * s, color: _lime)),
           Text(label,
-              style: _body(12, color: _c.sub)
+              style: _body(14 * s, color: _c.sub)
                   .copyWith(fontWeight: FontWeight.w600)),
         ],
       ),
     );
   }
 
+  // A single card listing whatever build/origin facts this shoe actually
+  // has, each as its own labeled row separated by a divider. Any field can
+  // be missing on a given shoe — only present fields get a row, and if none
+  // are present the card shows a neutral placeholder instead of being empty.
+  Widget _buildInfoPanel() {
+    final s = _scale;
+
+    final mats = <String, double>{};
+    if (widget.shoe.mcpFlk > 0) mats['Flyknit'] = widget.shoe.mcpFlk;
+    if (widget.shoe.mcpRbr > 0) mats['Rubber']  = widget.shoe.mcpRbr;
+    if (widget.shoe.mcpFom > 0) mats['Foam']    = widget.shoe.mcpFom;
+    if (widget.shoe.mcpLth > 0) mats['Leather'] = widget.shoe.mcpLth;
+
+    final rows = <Widget>[
+      if (mats.isNotEmpty)
+        _infoBlock(
+          label: 'THE BUILD',
+          child: Text(
+            mats.entries
+                .map((e) => '${e.key} ${e.value.toStringAsFixed(0)}%')
+                .join('   ·   '),
+            style: _body(16 * s, color: _c.text)
+                .copyWith(fontWeight: FontWeight.w600, height: 1.5),
+          ),
+        ),
+      if (widget.shoe.mfgCtr.isNotEmpty)
+        _infoBlock(
+          label: 'MADE IN',
+          child: Row(
+            children: [
+              Icon(Icons.public, color: _lime, size: 18 * s),
+              SizedBox(width: 8 * s),
+              Text(widget.shoe.mfgCtr,
+                  style: _body(16 * s, color: _c.text)
+                      .copyWith(fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      if (widget.shoe.mfgNrg.isNotEmpty)
+        _infoBlock(
+          label: 'ENERGY SOURCE',
+          child: Row(
+            children: [
+              Icon(Icons.recycling, color: _lime, size: 18 * s),
+              SizedBox(width: 8 * s),
+              Flexible(
+                child: Text(widget.shoe.mfgNrg,
+                    style: _body(16 * s, color: _c.text)
+                        .copyWith(fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ],
+          ),
+        ),
+    ];
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(20 * s),
+      decoration: BoxDecoration(
+        color: _c.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _c.border),
+      ),
+      child: rows.isEmpty
+          ? Text('No build details available yet.',
+              style: _body(14 * s, color: _c.sub))
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < rows.length; i++) ...[
+                  if (i > 0) ...[
+                    SizedBox(height: 18 * s),
+                    Container(height: 0.5, color: _c.border),
+                    SizedBox(height: 18 * s),
+                  ],
+                  rows[i],
+                ],
+              ],
+            ),
+    );
+  }
+
+  Widget _infoBlock({required String label, required Widget child}) {
+    final s = _scale;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: _body(11 * s, color: _c.sub)
+                .copyWith(fontWeight: FontWeight.w700, letterSpacing: 1.2)),
+        SizedBox(height: 8 * s),
+        child,
+      ],
+    );
+  }
+
   // ── CTA ───────────────────────────────────────────────────────────────────
 
   Widget _buildCTA() {
-    return GestureDetector(
-      onTap: widget.onCloseLoop,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        decoration: BoxDecoration(
-          color: _lime,
-          borderRadius: BorderRadius.circular(50),
-          boxShadow: [
-            BoxShadow(
-              color: _lime.withOpacity(0.28),
-              blurRadius: 24,
-              offset: const Offset(0, 8),
+    final s = _scale;
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: widget.onCloseLoop,
+          child: Container(
+            width: double.infinity,
+            padding: EdgeInsets.symmetric(vertical: 20 * s),
+            decoration: BoxDecoration(
+              color: _lime,
+              borderRadius: BorderRadius.circular(50),
+              boxShadow: [
+                BoxShadow(
+                  color: _lime.withOpacity(0.28),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('CLOSE THE LOOP', style: _heading(22, color: _black)),
-            const SizedBox(width: 10),
-            const Icon(Icons.arrow_forward_rounded, color: _black, size: 22),
-          ],
-        ),
-      ),
-    )
-        .animate()
-        .fadeIn(delay: 340.ms, duration: 400.ms)
-        .slideY(begin: 0.08, end: 0, delay: 340.ms, duration: 400.ms,
-            curve: Curves.easeOutCubic);
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('CLOSE THE LOOP', style: _heading(22 * s, color: _black)),
+                SizedBox(width: 10 * s),
+                Icon(Icons.arrow_forward_rounded, color: _black, size: 22 * s),
+              ],
+            ),
+          ),
+        )
+            .animate()
+            .fadeIn(delay: 340.ms, duration: 400.ms)
+            .slideY(begin: 0.08, end: 0, delay: 340.ms, duration: 400.ms,
+                curve: Curves.easeOutCubic),
+
+        SizedBox(height: 14 * s),
+
+        GestureDetector(
+          onTap: widget.onDelete,
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 8 * s),
+            child: Text('DELETE SHOE',
+                style: _body(13 * s, color: _danger)
+                    .copyWith(fontWeight: FontWeight.w700, letterSpacing: 0.6)),
+          ),
+        )
+            .animate()
+            .fadeIn(delay: 420.ms, duration: 400.ms),
+      ],
+    );
   }
+
 }

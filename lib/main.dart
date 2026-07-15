@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_core/firebase_core.dart';
@@ -10,16 +11,17 @@ import 'package:lottie/lottie.dart';
 import 'firebase_options.dart';
 import 'nike_colors.dart';
 import 'theme_notifier.dart';
+import 'font_scale_notifier.dart';
 import 'screens/login_screen.dart';
-import 'screens/customer_home_screen.dart';
 import 'screens/customer_landing_screen.dart';
-import 'screens/customer_shoe_detail_screen.dart';
+import 'screens/customer_locker_screen.dart';
 import 'screens/customer_profile_screen.dart';
 import 'screens/hub_inspector_screen.dart';
 import 'screens/inspector_profile_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/admin_profile_screen.dart';
 import 'widgets/chatbot_widget.dart';
+import 'widgets/nav_controls.dart';
 import 'services/chatbot_service.dart';
 
 // NOTE: bulkUploadEverything() is intentionally commented out.
@@ -31,7 +33,21 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  // Fire off a throwaway read now (don't await) so the Firestore
+  // WebChannel/gRPC connection is already warm by the time the user signs
+  // in. Without this, the *first* Firestore request of the session — the
+  // role lookup right after login — pays the full connection-negotiation
+  // cost, which on web can take several seconds and reads as "login hangs
+  // until I reload the page" (a reload doesn't really fix it; it's just a
+  // fresh session paying the same cold-start cost, except the browser's
+  // warm TLS/DNS state makes it feel faster).
+  unawaited(
+    FirebaseFirestore.instance.collection('users').limit(1).get()
+        .then((_) {}, onError: (_) {}),
+  );
   await loadThemePreference();
+  await loadInspectorThemePreference();
+  await loadFontScalePreference();
   // final firebaseService = FirebaseService();
   // await firebaseService.bulkUploadEverything();
   runApp(const NikeReRunApp());
@@ -76,11 +92,19 @@ class NikeReRunApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<bool>(
       valueListenable: isDarkMode,
-      builder: (_, dark, __) => MaterialApp(
-        title: 'Nike ReRun',
-        debugShowCheckedModeBanner: false,
-        theme: dark ? _darkTheme : _lightTheme,
-        home: const _AuthGate(),
+      builder: (_, dark, __) => ValueListenableBuilder<double>(
+        valueListenable: fontScale,
+        builder: (_, scale, __) => MaterialApp(
+          title: 'Nike ReRun',
+          debugShowCheckedModeBanner: false,
+          theme: dark ? _darkTheme : _lightTheme,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(scale)),
+            child: child!,
+          ),
+          home: const _AuthGate(),
+        ),
       ),
     );
   }
@@ -101,28 +125,76 @@ class _AuthGate extends StatelessWidget {
         if (authSnap.connectionState == ConnectionState.waiting) {
           return const _SplashScreen();
         }
-        if (authSnap.data == null) {
+        final user = authSnap.data;
+        if (user == null) {
           return const LoginScreen();
         }
-        return FutureBuilder<DocumentSnapshot>(
-          future: FirebaseFirestore.instance
-              .collection('users')
-              .doc(authSnap.data!.uid)
-              .get(),
-          builder: (context, userSnap) {
-            if (!userSnap.hasData) return const _SplashScreen();
-            final data = userSnap.data?.data() as Map<String, dynamic>?;
-            final role = data?['role'] as String? ?? 'unknown';
-            switch (role) {
-              case 'inspector':
-                return const InspectorShell();
-              case 'admin':
-                return const AdminShell();
-              default:
-                return const CustomerShell();
-            }
-          },
-        );
+        return _RoleGate(uid: user.uid);
+      },
+    );
+  }
+}
+
+// Fetches the signed-in user's role doc once per uid and routes to the
+// matching persona shell. Kept as its own StatefulWidget (rather than an
+// inline FutureBuilder inside _AuthGate) so the Firestore .get() isn't
+// re-fired on every unrelated rebuild (theme toggle, font-scale change,
+// etc.) — a fresh Future identity on every build was resetting the
+// FutureBuilder to "waiting" and re-querying Firestore each time.
+class _RoleGate extends StatefulWidget {
+  final String uid;
+  const _RoleGate({required this.uid});
+
+  @override
+  State<_RoleGate> createState() => _RoleGateState();
+}
+
+class _RoleGateState extends State<_RoleGate> {
+  late Future<DocumentSnapshot<Map<String, dynamic>>> _userDocFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _userDocFuture = _fetchUserDoc();
+  }
+
+  @override
+  void didUpdateWidget(covariant _RoleGate old) {
+    super.didUpdateWidget(old);
+    if (old.uid != widget.uid) {
+      _userDocFuture = _fetchUserDoc();
+    }
+  }
+
+  Future<DocumentSnapshot<Map<String, dynamic>>> _fetchUserDoc() {
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.uid)
+        .get();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      future: _userDocFuture,
+      builder: (context, userSnap) {
+        if (userSnap.connectionState != ConnectionState.done) {
+          return const _SplashScreen();
+        }
+        if (userSnap.hasError || !(userSnap.data?.exists ?? false)) {
+          // Couldn't load the role doc (offline, rules error, missing
+          // doc) — fall back to login instead of spinning forever.
+          return const LoginScreen();
+        }
+        final role = userSnap.data?.data()?['role'] as String? ?? 'unknown';
+        switch (role) {
+          case 'inspector':
+            return const InspectorShell();
+          case 'admin':
+            return const AdminShell();
+          default:
+            return const CustomerShell();
+        }
       },
     );
   }
@@ -265,7 +337,7 @@ class _SplashScreen extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Customer shell — 3 tabs: Home + Scan + Profile  |  floating pill nav bar
+// Customer shell — 3 tabs: Home + Scan + Profile  |  per-screen hamburger nav
 // ─────────────────────────────────────────────────────────────────────────────
 
 class CustomerShell extends StatefulWidget {
@@ -288,75 +360,30 @@ class _CustomerShellState extends State<CustomerShell> {
           IndexedStack(
             index: _index,
             children: [
-              CustomerLandingScreen(onScanTap: () => setState(() => _index = 1)),
-              CustomerScanScreen(isActive: _index == 1),
-              CustomerProfileScreen(onScanTap: () => setState(() => _index = 1)),
+              CustomerLandingScreen(
+                onScanTap: () => setState(() => _index = 1),
+                onNavSelect: (i) => setState(() => _index = i),
+              ),
+              CustomerScanScreen(
+                isActive: _index == 1,
+                onNavSelect: (i) => setState(() => _index = i),
+              ),
+              CustomerProfileScreen(
+                onScanTap: () => setState(() => _index = 1),
+                onHomeTap: () => setState(() => _index = 0),
+                onNavSelect: (i) => setState(() => _index = i),
+              ),
             ],
-          ),
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 24,
-            child: _buildFloatingNavBar(c),
           ),
           const ChatbotWidget(persona: ChatPersona.customer),
         ],
       ),
     );
   }
-
-  Widget _buildFloatingNavBar(NikeColors c) {
-    return SafeArea(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-        decoration: BoxDecoration(
-          color: c.card,
-          borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: c.border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.6),
-              blurRadius: 24,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _NavItem(
-              icon: Icons.home_outlined,
-              activeIcon: Icons.home,
-              label: 'Home',
-              index: 0,
-              current: _index,
-              onTap: () => setState(() => _index = 0),
-            ),
-            _NavItem(
-              icon: Icons.qr_code_outlined,
-              activeIcon: Icons.qr_code,
-              label: 'Scan',
-              index: 1,
-              current: _index,
-              onTap: () => setState(() => _index = 1),
-            ),
-            _NavItem(
-              icon: Icons.person_outline,
-              activeIcon: Icons.person,
-              label: 'Profile',
-              index: 2,
-              current: _index,
-              onTap: () => setState(() => _index = 2),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Inspector shell — 2 tabs: Inspect + Profile  |  floating pill nav bar
+// Inspector shell — 2 tabs: Inspect + Profile  |  per-screen hamburger nav
 // ─────────────────────────────────────────────────────────────────────────────
 
 class InspectorShell extends StatefulWidget {
@@ -371,74 +398,38 @@ class _InspectorShellState extends State<InspectorShell> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.nc;
-    return Scaffold(
-      backgroundColor: c.bg,
-      body: Stack(
-        children: [
-          IndexedStack(
-            index: _index,
-            children: const [
-              HubInspectorScreen(),
-              InspectorProfileScreen(),
+    // Inspector uses its own flat monochrome theme (factory-floor tool),
+    // toggled independently of the app-wide dark/light switch used by the
+    // other two personas.
+    return ValueListenableBuilder<bool>(
+      valueListenable: inspectorDarkMode,
+      builder: (context, dark, child) {
+        final c = dark ? NikeColors.inspectorDark : NikeColors.inspectorLight;
+        return Scaffold(
+          backgroundColor: c.bg,
+          body: Stack(
+            children: [
+              IndexedStack(
+                index: _index,
+                children: [
+                  HubInspectorScreen(
+                    isActive: _index == 0,
+                    onNavSelect: (i) => setState(() => _index = i),
+                  ),
+                  InspectorProfileScreen(onHomeTap: () => setState(() => _index = 0)),
+                ],
+              ),
+              const ChatbotWidget(persona: ChatPersona.inspector),
             ],
           ),
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 24,
-            child: _buildFloatingNavBar(c),
-          ),
-          const ChatbotWidget(persona: ChatPersona.inspector),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFloatingNavBar(NikeColors c) {
-    return SafeArea(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-        decoration: BoxDecoration(
-          color: c.card,
-          borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: c.border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.6),
-              blurRadius: 24,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _NavItem(
-              icon: Icons.qr_code_scanner_outlined,
-              activeIcon: Icons.qr_code_scanner,
-              label: 'Inspect',
-              index: 0,
-              current: _index,
-              onTap: () => setState(() => _index = 0),
-            ),
-            _NavItem(
-              icon: Icons.person_outline,
-              activeIcon: Icons.person,
-              label: 'Profile',
-              index: 1,
-              current: _index,
-              onTap: () => setState(() => _index = 1),
-            ),
-          ],
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Admin shell — 2 tabs: Dashboard + Profile  |  floating pill nav bar
+// Admin shell — 2 tabs: Dashboard + Profile  |  per-screen hamburger nav
 // ─────────────────────────────────────────────────────────────────────────────
 
 class AdminShell extends StatefulWidget {
@@ -460,60 +451,13 @@ class _AdminShellState extends State<AdminShell> {
         children: [
           IndexedStack(
             index: _index,
-            children: const [
-              DashboardScreen(),
-              AdminProfileScreen(),
+            children: [
+              DashboardScreen(onNavSelect: (i) => setState(() => _index = i)),
+              AdminProfileScreen(onHomeTap: () => setState(() => _index = 0)),
             ],
-          ),
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 24,
-            child: _buildFloatingNavBar(c),
           ),
           const ChatbotWidget(persona: ChatPersona.admin),
         ],
-      ),
-    );
-  }
-
-  Widget _buildFloatingNavBar(NikeColors c) {
-    return SafeArea(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-        decoration: BoxDecoration(
-          color: c.card,
-          borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: c.border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.6),
-              blurRadius: 24,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _NavItem(
-              icon: Icons.dashboard_outlined,
-              activeIcon: Icons.dashboard,
-              label: 'Dashboard',
-              index: 0,
-              current: _index,
-              onTap: () => setState(() => _index = 0),
-            ),
-            _NavItem(
-              icon: Icons.person_outline,
-              activeIcon: Icons.person,
-              label: 'Profile',
-              index: 1,
-              current: _index,
-              onTap: () => setState(() => _index = 1),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -528,8 +472,9 @@ class _AdminShellState extends State<AdminShell> {
 
 class CustomerScanScreen extends StatefulWidget {
   final bool isActive;
+  final ValueChanged<int>? onNavSelect;
 
-  const CustomerScanScreen({super.key, required this.isActive});
+  const CustomerScanScreen({super.key, required this.isActive, this.onNavSelect});
 
   @override
   State<CustomerScanScreen> createState() => _CustomerScanScreenState();
@@ -537,6 +482,8 @@ class CustomerScanScreen extends StatefulWidget {
 
 class _CustomerScanScreenState extends State<CustomerScanScreen>
     with TickerProviderStateMixin {
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+
   late final MobileScannerController _scanner;
   late final AnimationController _scanLineCtrl;
   late final Animation<double> _scanLineAnim;
@@ -627,9 +574,30 @@ class _CustomerScanScreenState extends State<CustomerScanScreen>
         return;
       }
 
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        final existingOwner = doc.data()?['CUID-LNK'] as String? ?? '';
+        if (existingOwner != currentUser.uid) {
+          // Anyone can register any shoe — this is a demo, not real
+          // inventory, so re-claim it for whoever scans it.
+          await FirebaseFirestore.instance
+              .collection('Shoes')
+              .doc(suid)
+              .update({'CUID-LNK': currentUser.uid});
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUser.uid)
+              .update({'SUID-LNK': FieldValue.arrayUnion([suid])});
+        }
+      }
+
       await Navigator.of(context).push(
         PageRouteBuilder(
-          pageBuilder: (_, __, ___) => CustomerShoeDetailScreen(suid: suid),
+          pageBuilder: (_, __, ___) => CustomerLockerScreen(
+            initialSuid: suid,
+            onScanTap: () => widget.onNavSelect?.call(1),
+            onNavSelect: widget.onNavSelect,
+          ),
           transitionsBuilder: (_, anim, __, child) => SlideTransition(
             position: Tween<Offset>(
                     begin: const Offset(1.0, 0.0), end: Offset.zero)
@@ -707,7 +675,21 @@ class _CustomerScanScreenState extends State<CustomerScanScreen>
   Widget build(BuildContext context) {
     final c = context.nc;
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: c.bg,
+      endDrawer: NavDrawer(
+        c: c,
+        chatPersona: ChatPersona.customer,
+        onSignOut: _signOut,
+        items: [
+          NavDrawerItem(icon: Icons.home, label: 'Home',
+              onTap: () { Navigator.of(context).pop(); widget.onNavSelect?.call(0); }),
+          NavDrawerItem(icon: Icons.qr_code, label: 'Scan', selected: true,
+              onTap: () => Navigator.of(context).pop()),
+          NavDrawerItem(icon: Icons.person, label: 'Profile',
+              onTap: () { Navigator.of(context).pop(); widget.onNavSelect?.call(2); }),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -764,22 +746,29 @@ class _CustomerScanScreenState extends State<CustomerScanScreen>
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       color: c.card,
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Text('Scan Mode',
-                  style: GoogleFonts.bebasNeue(
-                      fontSize: 22, color: c.text, letterSpacing: 1.2)),
-              const SizedBox(width: 10),
-              const Icon(Icons.qr_code_scanner,
-                  color: Color(0xFFCDFC49), size: 20),
-            ],
+          CircleIconButton(
+            icon: Icons.arrow_back,
+            c: c,
+            onTap: () => widget.onNavSelect?.call(0),
           ),
-          IconButton(
-            icon: Icon(Icons.logout, color: c.sub, size: 20),
-            onPressed: _signOut,
-            tooltip: 'Sign Out',
+          const SizedBox(width: 12),
+          Expanded(
+            child: Row(
+              children: [
+                Text('Scan Mode',
+                    style: GoogleFonts.bebasNeue(
+                        fontSize: 22, color: c.text, letterSpacing: 1.2)),
+                const SizedBox(width: 10),
+                const Icon(Icons.qr_code_scanner,
+                    color: Color(0xFFCDFC49), size: 20),
+              ],
+            ),
+          ),
+          CircleIconButton(
+            icon: Icons.menu_rounded,
+            c: c,
+            onTap: () => _scaffoldKey.currentState?.openEndDrawer(),
           ),
         ],
       ),
@@ -955,60 +944,3 @@ class _CornerPainter extends CustomPainter {
   bool shouldRepaint(_CornerPainter old) => false;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Nav item (shared bottom nav widget)
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _NavItem extends StatelessWidget {
-  final IconData     icon;
-  final IconData     activeIcon;
-  final String       label;
-  final int          index;
-  final int          current;
-  final VoidCallback onTap;
-
-  const _NavItem({
-    required this.icon,
-    required this.activeIcon,
-    required this.label,
-    required this.index,
-    required this.current,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final active = index == current;
-    final sub = context.nc.sub;
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: 80,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: Icon(
-                active ? activeIcon : icon,
-                key: ValueKey(active),
-                color: active ? const Color(0xFFCDFC49) : sub,
-                size: 22,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: GoogleFonts.nunito(
-                fontSize: 11,
-                color: active ? const Color(0xFFCDFC49) : sub,
-                fontWeight: active ? FontWeight.w700 : FontWeight.w400,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
